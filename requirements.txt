@@ -1,0 +1,27 @@
+# Core framework
+streamlit>=1.28.0
+
+# Data manipulation
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Data loading formats
+openpyxl>=3.1.0  # Excel support
+pyarrow>=12.0.0  # Parquet support
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Export formats
+python-docx>=0.8.11  # Word export
+Pillow>=10.0.0  # Image processing
+
+# HTTP requests (for AI APIs)
+requests>=2.31.0
+
+# Optional: AI API client (Anthropic)
+anthropic>=0.7.0  # Optionnel, commentez si non utilisé
+
+# Note: Ollama est un binaire externe, pas un package Python
+# Installez-le depuis https://ollama.ai

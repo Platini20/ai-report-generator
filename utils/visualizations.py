@@ -55,7 +55,7 @@ def filter_useful_columns(cols: List[str], df: pd.DataFrame,
                          exclude_cols: Optional[List[str]] = None) -> List[str]:
     """
     Filtre les colonnes utiles en excluant les problématiques
-    ✅ NOUVEAU : Paramètre exclude_cols pour colonnes vides/quasi-vides
+    ✅ Paramètre exclude_cols pour colonnes vides/quasi-vides
     """
     if exclude_cols is None:
         exclude_cols = []

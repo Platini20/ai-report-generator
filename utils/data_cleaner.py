@@ -1,7 +1,6 @@
 """
 Module de nettoyage et prétraitement des données
-VERSION NON-DESTRUCTIVE : Signale les problèmes sans supprimer
-SEUIL QUASI-VIDE : ≥90% (au lieu de >95%)
+SEUIL QUASI-VIDE : ≥90% 
 """
 
 import pandas as pd
@@ -12,7 +11,7 @@ from typing import Tuple, Dict, Any, List
 def clean_and_preprocess(df: pd.DataFrame, lang: str = 'fr') -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Analyse les données et signale les problèmes SANS supprimer
-    ✅ SEUIL QUASI-VIDE : ≥90% au lieu de >95%
+    ✅ SEUIL QUASI-VIDE : ≥90% 
     
     Args:
         df: DataFrame pandas original
@@ -246,10 +245,6 @@ def clean_and_preprocess(df: pd.DataFrame, lang: str = 'fr') -> Tuple[pd.DataFra
     
     # ==========================================
     # 9. FINALISER LE RAPPORT
-    # ✅ SUPPRIMÉ : Message "Aucun problème détecté" inapproprié
-    # Les anomalies sont gérées dans leur propre section
-    # ==========================================
-    # Pas de message par défaut ici - les anomalies sont signalées ailleurs
     
     return df_cleaned, cleaning_report
 

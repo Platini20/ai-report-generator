@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 # ==========================================
-# 🔒 AUTHENTIFICATION - DOIT ÊTRE AVANT st.set_page_config()
+# 🔒 AUTHENTIFICATION 
 # ==========================================
 from utils.auth_trial import (
     check_login,
@@ -46,7 +46,7 @@ from utils import (
 )
 
 # ==========================================
-# IMPORTS IA - VERSION UNIFIÉE (SIMPLIFIÉE)
+# IMPORTS IA - VERSION UNIFIÉE 
 # ==========================================
 from utils.ai_insights import (
     generate_basic_insights,
@@ -652,12 +652,9 @@ with tab1:
     if converted:
         st.success(f"🔢 {tr('converted_to_numeric', lang)}: {', '.join(map(str, converted[:5]))}")
     
-    # ✅ MESSAGE SUPPRIMÉ : "Aucune action nécessaire" était inapproprié
-    # Car il ne vérifiait pas les anomalies détectées (colonnes vides, doublons, etc.)
-    # Les anomalies sont maintenant affichées dans leur propre section ci-dessous
-    
+
     # ==========================================
-    # ✅ NOUVEAU : RAPPORT DÉTAILLÉ DES ANOMALIES
+    # ✅ RAPPORT DÉTAILLÉ DES ANOMALIES
     # ==========================================
     from utils.data_cleaner import get_detailed_anomaly_report
     

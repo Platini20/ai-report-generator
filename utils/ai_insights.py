@@ -11,16 +11,12 @@ from typing import Dict, Any, Optional, Tuple
 
 # ==========================================
 # ✅ CONFIGURATION DU MODÈLE ANTHROPIC
-# Changez cette valeur pour switcher entre modèles
 # ==========================================
+
 #ANTHROPIC_MODEL = "claude-3-haiku-20240307"  # Rapide, économique, fiable
 ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"  # Plus puissant, plus cher
 
-
-
 # Pour changer : décommentez la ligne Sonnet et commentez Haiku
-# C'est tout ! Une seule ligne à modifier 🎯
-
 
 # ==========================================
 # MODE 1 : ANTHROPIC API (Cloud)
@@ -59,7 +55,7 @@ Dataset Overview:
 {stats_text}
 """
         
-        # ✅ NOUVEAU : Ajouter contexte d'anomalies si disponible
+        # ✅ Ajouter contexte d'anomalies si disponible
         anomaly_context = ""
         if 'anomaly_report' in analysis:
             anomaly_rep = analysis['anomaly_report']
@@ -321,7 +317,7 @@ Dataset Analysis:
 {stats_text}
 """
         
-        # ✅ NOUVEAU : Ajouter contexte d'anomalies si disponible
+        # ✅ Ajouter contexte d'anomalies si disponible
         anomaly_context = ""
         if 'anomaly_report' in analysis:
             anomaly_rep = analysis['anomaly_report']

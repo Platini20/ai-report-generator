@@ -11,7 +11,7 @@ from typing import Dict, Optional, Tuple
 
 # ==========================================
 # BASE DE DONNÉES SIMPLE (Fichier JSON)
-# En production : utiliser Supabase/Firebase
+# En production : Supabase/Firebase
 # ==========================================
 
 def load_users_db() -> Dict:
@@ -49,7 +49,7 @@ def save_new_user(email: str, password_hash: str, lang: str = 'fr') -> bool:
         bool: True si succès
     """
     # Pour MVP: stocker dans session_state
-    # En production: appeler API Supabase/Firebase
+    # En production: API Supabase/Firebase
     
     if "registered_users" not in st.session_state:
         st.session_state.registered_users = {}
@@ -615,13 +615,13 @@ def show_upgrade_message():
             
             #### 📋 Nos Offres
             
-            **🌱 Starter - 29€/mois**
-            - ✅ 50 rapports/mois
+            **🌱 Starter - 29$/mois**
+            - ✅ 100 rapports/mois
             - ✅ Export HTML + Word
             - ✅ Support email
             
-            **🚀 Pro - 99€/mois** ⭐ Populaire
-            - ✅ 200 rapports/mois
+            **🚀 Pro - 99$/mois** ⭐ Populaire
+            - ✅ 500 rapports/mois
             - ✅ Export HTML + Word
             - ✅ Support prioritaire
             - ✅ API access
@@ -633,7 +633,7 @@ def show_upgrade_message():
             
             ---
             
-            📧 **Contact** : contact@votreapp.com  
+            📧 **Contact** : agouanetf@yahoo.com  
             💬 **Sujet** : Abonnement AI Report Generator
             """)
         else:
@@ -645,12 +645,12 @@ def show_upgrade_message():
             #### 📋 Our Plans
             
             **🌱 Starter - $29/month**
-            - ✅ 50 reports/month
+            - ✅ 100 reports/month
             - ✅ HTML + Word export
             - ✅ Email support
             
             **🚀 Pro - $99/month** ⭐ Popular
-            - ✅ 200 reports/month
+            - ✅ 500 reports/month
             - ✅ HTML + Word export
             - ✅ Priority support
             - ✅ API access
@@ -661,8 +661,8 @@ def show_upgrade_message():
             - ✅ Customization
             
             ---
-            
-            📧 **Contact**: contact@yourapp.com  
+
+            📧 **Contact**: agouanetf@yahoo.com  
             💬 **Subject**: AI Report Generator Subscription
             """)
     else:
@@ -676,7 +676,7 @@ def show_upgrade_message():
             - ⏳ Attendez le mois prochain
             - 📈 Passez au plan supérieur
             
-            📧 **Contact** : contact@votreapp.com
+            📧 **Contact** : agouanetf@yahoo.com
             """)
         else:
             st.markdown(f"""
@@ -688,7 +688,7 @@ def show_upgrade_message():
             - ⏳ Wait for next month
             - 📈 Upgrade to higher plan
             
-            📧 **Contact**: contact@yourapp.com
+            📧 **Contact**: agouanetf@yahoo.com
             """)
 
 

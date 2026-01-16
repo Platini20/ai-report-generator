@@ -346,100 +346,31 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
     
-    ai_mode = st.radio(
-        "Mode IA" if st.session_state.ui_lang == "fr" else "AI Mode",
-        options=[ "Anthropic API","Basic (None)"],
-        help="Choisissez votre fournisseur d'IA" if st.session_state.ui_lang == "fr" else "Choose your AI provider",
+    # ==========================================
+    # SERVICE IA - ANTHROPIC (PRÉ-CONFIGURÉ)
+    # ==========================================
+    st.info(
+        "🧠 Service IA Claude (Anthropic) - Inclus dans votre plan" 
+        if st.session_state.ui_lang == "fr" 
+        else "🧠 Claude AI Service (Anthropic) - Included in your plan"
     )
     
-    # ==========================================
-    # MODE ANTHROPIC API - VERSION COMMERCIALE
-    # ==========================================
-    if ai_mode == "Anthropic API":
-        st.info(
-            "🧠 Mode Anthropic (Service IA inclus)" 
-            if st.session_state.ui_lang == "fr" 
-            else "🧠 Anthropic mode (AI service included)"
-        )
-        
-        # ✅ CLÉ API PRÉ-CONFIGURÉE (Cachée à l'utilisateur)
-        api_key = st.secrets.get("anthropic", {}).get("api_key", "")
-        
-        if api_key:
-            st.success(
-                "✅ Service IA activé" 
-                if st.session_state.ui_lang == "fr" 
-                else "✅ AI service enabled"
-            )
-        else:
-            st.error(
-                "❌ Service IA non configuré. Ajoutez votre clé dans .streamlit/secrets.toml" 
-                if st.session_state.ui_lang == "fr" 
-                else "❌ AI service not configured. Add your key in .streamlit/secrets.toml"
-            )
-            api_key = None
+    # ✅ CLÉ API PRÉ-CONFIGURÉE (Cachée à l'utilisateur)
+    api_key = st.secrets.get("anthropic", {}).get("api_key", "")
     
-    # ==========================================
-    # MODE OLLAMA LOCAL
-    # ==========================================
-    elif ai_mode == "Ollama (Local)":
-        st.info(
-            "🖥️ Mode Ollama local (gratuit, privé)" 
+    if api_key:
+        st.success(
+            "✅ Service IA activé et prêt" 
             if st.session_state.ui_lang == "fr" 
-            else "🖥️ Ollama local mode (free, private)"
+            else "✅ AI service enabled and ready"
         )
-        
-        # Vérifier la disponibilité d'Ollama
-        from utils.local_llm import check_ollama_available, list_ollama_models
-        
-        ollama_available = check_ollama_available()
-        
-        if ollama_available:
-            # Lister les modèles
-            models = list_ollama_models()
-            
-            if models:
-                st.success(
-                    f"✅ Ollama prêt - {len(models)} modèle(s) disponible(s)" 
-                    if st.session_state.ui_lang == "fr" 
-                    else f"✅ Ollama ready - {len(models)} model(s) available"
-                )
-                
-                # Sélection du modèle
-                selected_model = st.selectbox(
-                    "📦 Sélectionner le modèle" if st.session_state.ui_lang == "fr" else "📦 Select model",
-                    options=models,
-                    help="Modèles installés localement",
-                )
-            else:
-                st.warning(
-                    "⚠️ Aucun modèle trouvé. Installez-en un:" 
-                    if st.session_state.ui_lang == "fr" 
-                    else "⚠️ No models found. Install one:"
-                )
-                st.code("ollama pull llama3.2:3b", language="bash")
-        else:
-            st.error(
-                "❌ Ollama non accessible. Lancez-le avec:" 
-                if st.session_state.ui_lang == "fr" 
-                else "❌ Ollama not accessible. Start it with:"
-            )
-            st.code("ollama serve", language="bash")
-    
-    # ==========================================
-    # MODE BASIQUE (NONE)
-    # ==========================================   
     else:
-        st.info(
-            "💡 Mode basique (sans IA)" 
+        st.error(
+            "❌ Service IA non configuré. Contactez l'administrateur." 
             if st.session_state.ui_lang == "fr" 
-            else "💡 Basic mode (no AI)"
+            else "❌ AI service not configured. Contact administrator."
         )
-        st.caption(
-            "Les insights seront générés à partir des statistiques de base uniquement." 
-            if st.session_state.ui_lang == "fr"
-            else "Insights will be generated from basic statistics only."
-        )
+        api_key = None
     
     st.markdown("---")
     
@@ -892,6 +823,7 @@ with tab4:
         # ==========================================
         # MODE ANTHROPIC API
         # ==========================================
+        ai_mode = "Anthropic API"  # Mode fixe pour cette version
         if ai_mode == "Anthropic API" and api_key:
             st.info("🧠 Mode Anthropic (Service IA inclus)")
             st.success("✅ Service IA activé")
@@ -923,18 +855,9 @@ with tab4:
                 
     
     with colB:
-        can_generate = True
-        if ai_mode == "Anthropic API" and not api_key:
-            can_generate = False
+        can_generate = api_key is not None
         
-        if st.button("🚀 Générer"):
-        # ✅ GÉNÈRE UNIQUEMENT AU CLIC
-            can_generate_report_bool, quota_message = can_generate_report()
-        
-            if not can_generate_report_bool:
-                show_upgrade_message()
-                st.stop()
-        
+        if st.button("🚀 Générer les Insights IA" if st.session_state.ui_lang == "fr" else "🚀 Generate AI Insights"):
             # ==========================================
             # ✅ VÉRIFIER QUOTA AVANT GÉNÉRATION
             # =========================================
@@ -945,46 +868,29 @@ with tab4:
                 show_upgrade_message()
                 st.stop()
             
+            if not api_key:
+                st.error(
+                    "❌ Service IA non disponible. Contactez l'administrateur." 
+                    if st.session_state.ui_lang == "fr"
+                    else "❌ AI service unavailable. Contact administrator."
+                )
+                st.stop()
+            
             # Afficher message si essai gratuit
             if quota_message:
                 st.info(f"💡 {quota_message}")
             
             with st.spinner(
-                "🧠 Analyse en cours..." 
+                "🧠 Claude analyse vos données... (30-60 secondes)" 
                 if st.session_state.ui_lang == "fr" 
-                else "🧠 Analyzing..."
+                else "🧠 Claude is analyzing your data... (30-60 seconds)"
             ):
                 try:
-                    if ai_mode == "Anthropic API" and api_key:
-                        st.session_state.ai_insights = generate_ai_insights(
-                            analysis, 
-                            api_key, 
-                            lang=st.session_state.report_lang
-                        )
-                    
-                    elif ai_mode == "Ollama (Local)" and selected_model:
-                        if any(x in selected_model.lower() for x in ['7b', '8b', 'latest']):
-                            if not any(x in selected_model.lower() for x in ['1b', '3b']):
-                                st.warning(
-                                    f"⏳ Le modèle {selected_model} peut être lent (3-5 min). Soyez patient !" 
-                                    if st.session_state.ui_lang == "fr"
-                                    else f"⏳ Model {selected_model} may be slow (3-5 min). Be patient!"
-                                )
-                        
-                        raw_insights = llm_insights_local(
-                            df,
-                            analysis,
-                            lang=st.session_state.report_lang,
-                            model=selected_model
-                        )
-                        
-                        st.session_state.ai_insights = normalize_insights_for_report(raw_insights)
-                    
-                    else:
-                        st.session_state.ai_insights = generate_basic_insights(
-                            analysis,
-                            lang=st.session_state.report_lang
-                        )
+                    st.session_state.ai_insights = generate_ai_insights(
+                        analysis, 
+                        api_key, 
+                        lang=st.session_state.report_lang
+                    )
                     
                     st.success(
                         "✅ Insights générés !" 

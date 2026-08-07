@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 # ==========================================
 # 🔒 AUTHENTIFICATION 
 # ==========================================
-from utils.auth_trial import (
+from utils.auth_supabase import (
     check_login,
     can_generate_report,
     increment_report_count,

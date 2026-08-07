@@ -1,6 +1,6 @@
 """
-Système d'authentification avec essai gratuit et auto-inscription
-Version complète avec traductions FR/EN
+Système d'authentification avec essai gratuit et plans d'abonnement
+Version complète : Trial + Starter + Pro + Enterprise
 """
 
 import streamlit as st
@@ -32,6 +32,54 @@ def hash_password(password: str) -> str:
 
 
 # ==========================================
+# CONFIGURATION DES PLANS
+# ==========================================
+
+PLAN_CONFIGS = {
+    "trial": {
+        "name": "Trial",
+        "reports_limit": 3,
+        "max_file_size_mb": 100,
+        "max_rows": 100000,
+        "ai_modes": ["Anthropic API"],  # Trial = 3 rapports IA gratuits
+        "export_formats": ["HTML", "Word"],
+        "price": 0,
+        "icon": "🎁"
+    },
+    "starter": {
+        "name": "Starter",
+        "reports_limit": 100,
+        "max_file_size_mb": 200,
+        "max_rows": 50000,
+        "ai_modes": ["Anthropic API"],  # Uniquement Anthropic AI
+        "export_formats": ["HTML", "Word"],
+        "price": 29,
+        "icon": "🚀"
+    },
+    "pro": {
+        "name": "Pro",
+        "reports_limit": 500,
+        "max_file_size_mb": 500,
+        "max_rows": 500000,
+        "ai_modes": ["None", "Ollama (Local)", "Anthropic API"],
+        "export_formats": ["HTML", "Word", "PDF"],
+        "price": 99,
+        "icon": "⭐"
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "reports_limit": -1,  # Illimité
+        "max_file_size_mb": -1,
+        "max_rows": -1,
+        "ai_modes": ["None", "Ollama (Local)", "Anthropic API"],
+        "export_formats": ["HTML", "Word", "PDF", "PowerPoint"],
+        "price": 199,
+        "icon": "💎"
+    }
+}
+
+
+# ==========================================
 # AUTO-INSCRIPTION (NOUVEAU)
 # ==========================================
 
@@ -48,17 +96,14 @@ def save_new_user(email: str, password_hash: str, lang: str = 'fr') -> bool:
     Returns:
         bool: True si succès
     """
-    # Pour MVP: stocker dans session_state
-    # En production: API Supabase/Firebase
-    
     if "registered_users" not in st.session_state:
         st.session_state.registered_users = {}
     
     st.session_state.registered_users[email] = {
         "password_hash": password_hash,
-        "plan": "trial",
+        "plan": "trial",  # Toujours commencer en trial
         "reports_used": 0,
-        "reports_limit": 3,
+        "reports_limit": PLAN_CONFIGS["trial"]["reports_limit"],
         "created_at": datetime.now().strftime("%Y-%m-%d"),
     }
     
@@ -67,11 +112,9 @@ def save_new_user(email: str, password_hash: str, lang: str = 'fr') -> bool:
 
 def user_exists(email: str) -> bool:
     """Vérifie si un utilisateur existe déjà"""
-    # Vérifier dans secrets
     if get_user(email):
         return True
     
-    # Vérifier dans les nouveaux inscrits (session)
     if "registered_users" in st.session_state:
         if email in st.session_state.registered_users:
             return True
@@ -81,12 +124,10 @@ def user_exists(email: str) -> bool:
 
 def get_user_from_all_sources(email: str) -> Optional[Dict]:
     """Récupère un utilisateur depuis toutes les sources"""
-    # D'abord les secrets (utilisateurs pré-configurés)
     user = get_user(email)
     if user:
         return user
     
-    # Ensuite les nouveaux inscrits (session)
     if "registered_users" in st.session_state:
         if email in st.session_state.registered_users:
             return st.session_state.registered_users[email]
@@ -103,8 +144,6 @@ def check_login() -> bool:
     Vérifie l'authentification avec auto-inscription
     Retourne True si authentifié, False sinon
     """
-    
-    # Récupérer la langue de l'interface (par défaut FR)
     ui_lang = st.session_state.get("ui_lang", "fr")
     
     # Traductions
@@ -181,17 +220,19 @@ def check_login() -> bool:
         if not email or not password:
             st.session_state["auth_error"] = t['error_empty_fields']
             return
-        
-        # Récupérer l'utilisateur depuis toutes les sources
+
         user = get_user_from_all_sources(email)
         
         if user and hash_password(password) == user.get("password_hash"):
             # Authentification réussie
+            plan = user.get("plan", "trial")
+            plan_config = PLAN_CONFIGS.get(plan, PLAN_CONFIGS["trial"])
+            
             st.session_state["authenticated"] = True
             st.session_state["user_email"] = email
-            st.session_state["user_plan"] = user.get("plan", "trial")
+            st.session_state["user_plan"] = plan
             st.session_state["reports_used"] = user.get("reports_used", 0)
-            st.session_state["reports_limit"] = user.get("reports_limit", 3)
+            st.session_state["reports_limit"] = plan_config["reports_limit"]
             st.session_state["auth_error"] = None
             st.session_state["show_register"] = False
         else:
@@ -204,7 +245,6 @@ def check_login() -> bool:
         password = st.session_state.get("register_password", "")
         confirm = st.session_state.get("register_confirm", "")
         
-        # Validation
         if not email or not password or not confirm:
             st.session_state["register_error"] = t['error_empty_fields']
             return
@@ -228,110 +268,143 @@ def check_login() -> bool:
         # Créer le compte
         password_hash = hash_password(password)
         if save_new_user(email, password_hash, ui_lang):
-            st.session_state["register_success"] = t['success_account_created']
+            st.session_state["register_success"] = True
             st.session_state["register_error"] = None
             st.session_state["show_register"] = False
-            # Pré-remplir l'email pour le login
-            st.session_state["login_email"] = email
-        else:
-            st.session_state["register_error"] = "Error creating account"
     
-    # Si déjà authentifié, retourner True
-    if st.session_state.get("authenticated", False):
+    # Vérifier si déjà authentifié
+    if st.session_state.get("authenticated"):
         return True
     
-    
-    # ==========================================
-    # SÉLECTEUR DE LANGUE EN HAUT
-    # ==========================================
-    col1, col2, col3 = st.columns([2, 1, 2])
-    
-    with col2:
-        lang_option = st.selectbox(
-            "🌍",
-            options=["fr", "en"],
-            format_func=lambda x: "🇫🇷 Français" if x == "fr" else "🇬🇧 English",
-            index=0 if ui_lang == "fr" else 1,
-            key="login_lang_selector",
-            label_visibility="collapsed"
-        )
-        
-        # Si changement de langue, mettre à jour et rerun
-        if lang_option != ui_lang:
-            st.session_state["ui_lang"] = lang_option
-            st.rerun()
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Recharger les traductions si la langue a changé
-    t = texts.get(st.session_state.get("ui_lang", "fr"), texts['fr'])
-    
-    
-    # Styles CSS
+    # Afficher le formulaire de connexion/inscription
     st.markdown("""
-    <style>
-        .login-container {
-            max-width: 500px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        .login-header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        .trial-badge {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1rem;
-            border-radius: 10px;
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-    </style>
+        <style>
+            .login-container {
+                max-width: 500px;
+                margin: 0 auto;
+                padding: 2rem;
+            }
+            .login-header {
+                text-align: center;
+                margin-bottom: 2rem;
+            }
+            .login-title {
+                font-size: 2.5rem;
+                font-weight: 800;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 0.5rem;
+            }
+            .trial-badge {
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                color: white;
+                padding: 0.8rem 1.5rem;
+                border-radius: 12px;
+                margin: 1.5rem 0;
+                text-align: center;
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            }
+            .pricing-box {
+                background: #f8f9fa;
+                padding: 1rem;
+                border-radius: 8px;
+                margin: 1rem 0;
+                font-size: 0.9rem;
+            }
+        </style>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="login-container">', unsafe_allow_html=True)
-    
-    # Header
-    st.markdown('<div class="login-header">', unsafe_allow_html=True)
-    st.title(t['title'])
-    st.markdown(f"**{t['app_name']}**")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Badge essai gratuit
-    st.markdown(f"""
-    <div class="trial-badge">
-        <h3 style="margin: 0; color: white;">{t['trial_badge_title']}</h3>
-        <p style="margin: 0.5rem 0 0 0; font-size: 1.1rem;">
-            <strong>{t['trial_badge_text']}</strong>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Toggle entre Login et Register
-    show_register = st.session_state.get("show_register", False)
-    
-    if not show_register:
-        # ==========================================
-        # FORMULAIRE DE CONNEXION
-        # ==========================================
+    with st.container():
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
         
-        # Afficher succès inscription si présent
-        if st.session_state.get("register_success"):
-            st.success(st.session_state["register_success"])
-            st.session_state["register_success"] = None
+        # Header
+        st.markdown(f"""
+            <div class="login-header">
+                <h1 class="login-title">{t['app_name']}</h1>
+                <p style="font-size: 1.1rem; color: #6b7280;">{t['title']}</p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        # Afficher erreur si présente
-        if st.session_state.get("auth_error"):
-            st.error(f"❌ {st.session_state['auth_error']}")
+        # Badge essai gratuit
+        st.markdown(f"""
+            <div class="trial-badge">
+                <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.3rem;">
+                    {t['trial_badge_title']}
+                </div>
+                <div style="font-size: 0.95rem; opacity: 0.95;">
+                    {t['trial_badge_text']}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
         
-        # Formulaire de connexion
-        with st.form("login_form", clear_on_submit=False):
+        # Afficher le formulaire d'inscription ou de connexion
+        show_register = st.session_state.get("show_register", False)
+        
+        if show_register:
+            # FORMULAIRE D'INSCRIPTION
+            st.markdown(f"### {t['register_title']}")
+            st.info(t['register_info'])
+            
+            # Message de succès si inscription réussie
+            if st.session_state.get("register_success"):
+                st.success(t['success_account_created'])
+                if st.button(t['back_to_login'], use_container_width=True):
+                    st.session_state["show_register"] = False
+                    st.session_state["register_success"] = False
+                    st.rerun()
+            else:
+                # Afficher les erreurs
+                if st.session_state.get("register_error"):
+                    st.error(st.session_state["register_error"])
+                
+                # Champs du formulaire
+                st.text_input(
+                    t['email_label'],
+                    key="register_email",
+                    placeholder=t['email_placeholder']
+                )
+                
+                st.text_input(
+                    t['password_label'],
+                    type="password",
+                    key="register_password",
+                    placeholder=t['password_placeholder']
+                )
+                
+                st.text_input(
+                    t['confirm_password_label'],
+                    type="password",
+                    key="register_confirm",
+                    placeholder=t['confirm_password_placeholder']
+                )
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button(t['create_account_button'], type="primary", use_container_width=True):
+                        register_submitted()
+                        st.rerun()
+                
+                with col2:
+                    if st.button(t['back_to_login'], use_container_width=True):
+                        st.session_state["show_register"] = False
+                        st.session_state["register_error"] = None
+                        st.rerun()
+        
+        else:
+            # FORMULAIRE DE CONNEXION
+            # Afficher les erreurs
+            if st.session_state.get("auth_error"):
+                st.error(st.session_state["auth_error"])
+            
+            # Champs du formulaire
             st.text_input(
                 t['email_label'],
                 key="login_email",
                 placeholder=t['email_placeholder']
             )
+            
             st.text_input(
                 t['password_label'],
                 type="password",
@@ -339,94 +412,31 @@ def check_login() -> bool:
                 placeholder=t['password_placeholder']
             )
             
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col2:
-                submit = st.form_submit_button(
-                    t['login_button'],
-                    use_container_width=True,
-                    type="primary"
-                )
-        
-        if submit:
-            login_submitted()
-            if st.session_state.get("authenticated"):
-                st.rerun()
-        
-        st.markdown("---")
-        st.markdown(f"<p style='text-align: center;'>{t['or_separator']}</p>", unsafe_allow_html=True)
-        
-        # Bouton pour aller à l'inscription
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button(t['register_button'], use_container_width=True):
-                st.session_state["show_register"] = True
-                st.session_state["auth_error"] = None
-                st.rerun()
-    
-    else:
-        # ==========================================
-        # FORMULAIRE D'INSCRIPTION
-        # ==========================================
-        
-        st.markdown(f"### {t['register_title']}")
-        st.info(t['register_info'])
-        
-        # Afficher erreur si présente
-        if st.session_state.get("register_error"):
-            st.error(f"❌ {st.session_state['register_error']}")
-        
-        # Formulaire d'inscription
-        with st.form("register_form", clear_on_submit=True):
-            st.text_input(
-                t['email_label'],
-                key="register_email",
-                placeholder=t['email_placeholder']
-            )
-            st.text_input(
-                t['password_label'],
-                type="password",
-                key="register_password",
-                placeholder=t['password_placeholder']
-            )
-            st.text_input(
-                t['confirm_password_label'],
-                type="password",
-                key="register_confirm",
-                placeholder=t['confirm_password_placeholder']
-            )
+            col1, col2 = st.columns(2)
             
-            col1, col2, col3 = st.columns([1, 2, 1])
+            with col1:
+                if st.button(t['login_button'], type="primary", use_container_width=True):
+                    login_submitted()
+                    st.rerun()
+            
             with col2:
-                submit = st.form_submit_button(
-                    t['create_account_button'],
-                    use_container_width=True,
-                    type="primary"
-                )
+                if st.button(t['register_button'], use_container_width=True):
+                    st.session_state["show_register"] = True
+                    st.session_state["auth_error"] = None
+                    st.rerun()
         
-        if submit:
-            register_submitted()
-            if not st.session_state.get("register_error"):
-                st.rerun()
-        
+        # Tarifs
         st.markdown("---")
-        
-        # Bouton retour au login
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button(t['back_to_login'], use_container_width=True):
-                st.session_state["show_register"] = False
-                st.session_state["register_error"] = None
-                st.rerun()
-    
-    # Info tarifs
-    with st.expander(f"💰 {t['pricing_info']}"):
         st.markdown(f"""
-        - 🌱 {t['starter_plan']}
-        - 🚀 {t['pro_plan']}
-        - 🏢 {t['enterprise_plan']}
-        """)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+            <div class="pricing-box">
+                <strong>{t['pricing_info']}</strong><br/>
+                🚀 {t['starter_plan']}<br/>
+                ⭐ {t['pro_plan']}<br/>
+                💎 {t['enterprise_plan']}
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     return False
 
@@ -440,43 +450,27 @@ def can_generate_report() -> Tuple[bool, str]:
     Vérifie si l'utilisateur peut générer un rapport
     
     Returns:
-        (bool, str): (peut_générer, message)
+        tuple: (can_generate, message)
     """
     if not st.session_state.get("authenticated"):
-        return False, "Not authenticated"
+        return False, "Non authentifié"
     
     plan = st.session_state.get("user_plan", "trial")
-    used = st.session_state.get("reports_used", 0)
-    limit = st.session_state.get("reports_limit", 3)
+    reports_used = st.session_state.get("reports_used", 0)
+    reports_limit = st.session_state.get("reports_limit", 3)
     
-    ui_lang = st.session_state.get("ui_lang", "fr")
+    # Si limite illimitée (enterprise)
+    if reports_limit == -1:
+        return True, ""
     
-    # Traductions
-    if ui_lang == 'fr':
-        msg_remaining = f"Essai gratuit : {limit - used} rapport(s) restant(s)"
-        msg_limit_reached = f"Limite mensuelle atteinte ({limit} rapports/mois)"
-        msg_trial_expired = "Essai gratuit épuisé"
-    else:
-        msg_remaining = f"Free trial: {limit - used} report(s) remaining"
-        msg_limit_reached = f"Monthly limit reached ({limit} reports/month)"
-        msg_trial_expired = "Free trial expired"
-    
-    # Plan payant
-    if plan in ["starter", "pro", "enterprise"]:
-        if used < limit:
-            return True, ""
+    # Vérifier la limite
+    if reports_used >= reports_limit:
+        if plan == "trial":
+            return False, "Essai gratuit épuisé"
         else:
-            return False, msg_limit_reached
+            return False, f"Limite mensuelle atteinte ({reports_limit} rapports)"
     
-    # Plan trial
-    if plan == "trial":
-        if used < limit:
-            remaining = limit - used
-            return True, msg_remaining
-        else:
-            return False, msg_trial_expired
-    
-    return False, "Unknown plan"
+    return True, ""
 
 
 def increment_report_count():
@@ -496,8 +490,13 @@ def get_quota_info() -> Dict:
     plan = st.session_state.get("user_plan", "trial")
     used = st.session_state.get("reports_used", 0)
     limit = st.session_state.get("reports_limit", 3)
-    remaining = max(0, limit - used)
-    percentage = (used / limit * 100) if limit > 0 else 0
+    
+    if limit == -1:
+        remaining = -1  # Illimité
+        percentage = 0
+    else:
+        remaining = max(0, limit - used)
+        percentage = (used / limit * 100) if limit > 0 else 0
     
     return {
         "plan": plan,
@@ -506,7 +505,7 @@ def get_quota_info() -> Dict:
         "remaining": remaining,
         "percentage": percentage,
         "is_trial": plan == "trial",
-        "is_expired": used >= limit
+        "is_expired": used >= limit if limit != -1 else False
     }
 
 
@@ -521,52 +520,49 @@ def show_quota_sidebar():
     
     ui_lang = st.session_state.get("ui_lang", "fr")
     quota = get_quota_info()
+    plan_config = PLAN_CONFIGS.get(quota["plan"], PLAN_CONFIGS["trial"])
     
     st.markdown("---")
     
     # Traductions
     if ui_lang == 'fr':
-        trial_label = "🎁 Essai Gratuit"
-        trial_expired = "🚫 Essai gratuit épuisé"
         used_label = "Utilisés"
         remaining_label = "Restants"
         trial_ended = "⚠️ Essai gratuit terminé"
         continue_text = "Continuez à utiliser le service :"
         contact_text = "📧 Contact : agouanetf@yahoo.com"
         pricing_title = "Tarifs :"
-        starter = "🌱 29$/mois (100 rapports)"
-        pro = "🚀 99$/mois (500 rapports)"
-        warning_remaining = f"⚠️ Plus que {quota['remaining']} rapport(s) gratuit(s) !"
-        warning_monthly = f"⚠️ Plus que {quota['remaining']} rapport(s) ce mois"
+        warning_remaining_trial = f"⚠️ Plus que {quota['remaining']} rapport(s) gratuit(s) !"
+        warning_remaining_paid = f"⚠️ Plus que {quota['remaining']} rapport(s) ce mois"
         think_subscribe = "💡 Pensez à vous abonner pour continuer"
+        unlimited = "Illimité ♾️"
     else:
-        trial_label = "🎁 Free Trial"
-        trial_expired = "🚫 Free trial expired"
         used_label = "Used"
         remaining_label = "Remaining"
         trial_ended = "⚠️ Free trial ended"
         continue_text = "Continue using the service:"
         contact_text = "📧 Contact: agouanetf@yahoo.com"
         pricing_title = "Pricing:"
-        starter = "🌱 29$/month (100 reports)"
-        pro = "🚀 99$/month (500 reports)"
-        warning_remaining = f"⚠️ Only {quota['remaining']} free report(s) left!"
-        warning_monthly = f"⚠️ Only {quota['remaining']} report(s) left this month"
+        warning_remaining_trial = f"⚠️ Only {quota['remaining']} free report(s) left!"
+        warning_remaining_paid = f"⚠️ Only {quota['remaining']} report(s) left this month"
         think_subscribe = "💡 Consider subscribing to continue"
+        unlimited = "Unlimited ♾️"
+    
+    # Badge du plan
+    plan_display = f"{plan_config['icon']} {plan_config['name']}"
     
     if quota["is_trial"]:
-        # Badge essai gratuit
         if quota["is_expired"]:
-            st.error(trial_expired)
+            st.error(f"🚫 {plan_display}")
         else:
-            st.info(trial_label)
+            st.info(f"🎁 {plan_display}")
     else:
-        plan_labels = {
-            "starter": "🌱 Starter",
-            "pro": "🚀 Pro",
-            "enterprise": "🏢 Enterprise"
-        }
-        st.success(f"**{plan_labels.get(quota['plan'], quota['plan'])}**")
+        if quota["plan"] == "enterprise":
+            st.success(f"💎 {plan_display}")
+        elif quota["plan"] == "pro":
+            st.success(f"⭐ {plan_display}")
+        else:
+            st.success(f"🚀 {plan_display}")
     
     # Progress bar
     if quota["limit"] > 0:
@@ -576,7 +572,10 @@ def show_quota_sidebar():
     with col1:
         st.metric(used_label, quota["used"])
     with col2:
-        st.metric(remaining_label, quota["remaining"])
+        if quota["limit"] == -1:
+            st.metric(remaining_label, unlimited)
+        else:
+            st.metric(remaining_label, quota["remaining"])
     
     # Avertissements
     if quota["is_trial"] and quota["is_expired"]:
@@ -587,16 +586,17 @@ def show_quota_sidebar():
         {contact_text}
         
         **{pricing_title}**
-        - {starter}
-        - {pro}
+        - 🚀 Starter: $29/mois (100 rapports)
+        - ⭐ Pro: $99/mois (500 rapports)
+        - 💎 Enterprise: Sur devis (illimité)
         """)
     
     elif quota["is_trial"] and quota["remaining"] <= 1:
-        st.warning(warning_remaining)
+        st.warning(warning_remaining_trial)
         st.info(think_subscribe)
     
-    elif not quota["is_trial"] and quota["remaining"] <= 5:
-        st.warning(warning_monthly)
+    elif not quota["is_trial"] and quota["limit"] != -1 and quota["remaining"] <= 5:
+        st.warning(warning_remaining_paid)
 
 
 def show_upgrade_message():
@@ -615,21 +615,30 @@ def show_upgrade_message():
             
             #### 📋 Nos Offres
             
-            **🌱 Starter - 29$/mois**
+            **🚀 Starter - 29$/mois**
             - ✅ 100 rapports/mois
+            - ✅ 50 MB max par fichier
+            - ✅ 50,000 lignes max
+            - ✅ Ollama local
             - ✅ Export HTML + Word
-            - ✅ Support email
             
-            **🚀 Pro - 99$/mois** ⭐ Populaire
+            **⭐ Pro - 99$/mois** ⭐ Populaire
             - ✅ 500 rapports/mois
-            - ✅ Export HTML + Word
-            - ✅ Support prioritaire
-            - ✅ API access
+            - ✅ 200 MB max par fichier
+            - ✅ 500,000 lignes max
+            - ✅ Tous modes IA (Ollama + Anthropic)
+            - ✅ Export HTML + Word + PDF
+            - ✅ Templates personnalisés
+            - ✅ Rapports planifiés
+            - ✅ Accès API
             
-            **🏢 Enterprise - Sur devis**
+            **💎 Enterprise - Sur devis**
             - ✅ Rapports illimités
-            - ✅ Support dédié
-            - ✅ Personnalisation
+            - ✅ Fichiers illimités
+            - ✅ Lignes illimitées
+            - ✅ Tous modes IA
+            - ✅ Tous formats export
+            - ✅ Support dédié 24/7
             
             ---
             
@@ -644,24 +653,33 @@ def show_upgrade_message():
             
             #### 📋 Our Plans
             
-            **🌱 Starter - $29/month**
+            **🚀 Starter - $29/month**
             - ✅ 100 reports/month
+            - ✅ 50 MB max per file
+            - ✅ 50,000 rows max
+            - ✅ Ollama local
             - ✅ HTML + Word export
-            - ✅ Email support
             
-            **🚀 Pro - $99/month** ⭐ Popular
+            **⭐ Pro - $99/month** ⭐ Popular
             - ✅ 500 reports/month
-            - ✅ HTML + Word export
-            - ✅ Priority support
+            - ✅ 200 MB max per file
+            - ✅ 500,000 rows max
+            - ✅ All AI modes (Ollama + Anthropic)
+            - ✅ HTML + Word + PDF export
+            - ✅ Custom templates
+            - ✅ Scheduled reports
             - ✅ API access
             
-            **🏢 Enterprise - Custom pricing**
+            **💎 Enterprise - Custom pricing**
             - ✅ Unlimited reports
-            - ✅ Dedicated support
-            - ✅ Customization
+            - ✅ Unlimited file size
+            - ✅ Unlimited rows
+            - ✅ All AI modes
+            - ✅ All export formats
+            - ✅ Dedicated support 24/7
             
             ---
-
+            
             📧 **Contact**: agouanetf@yahoo.com  
             💬 **Subject**: AI Report Generator Subscription
             """)

@@ -16,7 +16,7 @@ from typing import Dict, Optional, Tuple
 
 from supabase import create_client, Client
 
-from plans_config import PLAN_CONFIGS, DEFAULT_PLAN, get_plan
+from utils.plans_config import PLAN_CONFIGS, DEFAULT_PLAN, get_plan
 
 CONTACT_EMAIL = "agouanetf@yahoo.com"
 

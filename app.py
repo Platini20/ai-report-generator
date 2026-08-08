@@ -51,7 +51,6 @@ from utils import (
 from utils.ai_insights import (
     generate_basic_insights,
     normalize_insights_for_report,
-    llm_insights_local,
     generate_ai_insights,
 )
 
@@ -223,7 +222,7 @@ def show_home_screen(lang: str):
             - **🧹 Nettoyage automatique** des données
             - **📊 Analyse statistique** complète
             - **📈 Visualisations interactives** (6 types)
-            - **🧠 Insights IA** (3 modes disponibles)
+            - **🧠 Insights IA** propulsés par Claude (Anthropic)
             - **📄 Rapports professionnels** (HTML + Word)
             - **🌍 Interface bilingue** (FR/EN)
             """)
@@ -234,7 +233,7 @@ def show_home_screen(lang: str):
             - **🧹 Automatic data cleaning**
             - **📊 Complete statistical analysis**
             - **📈 Interactive visualizations** (6 types)
-            - **🧠 AI insights** (3 modes available)
+            - **🧠 AI insights** powered by Claude (Anthropic)
             - **📄 Professional reports** (HTML + Word)
             - **🌍 Bilingual interface** (FR/EN)
             """)
@@ -904,7 +903,7 @@ with tab4:
                     increment_report_count()
                     
                     # Afficher quota restant
-                    from utils.auth_trial import get_quota_info
+                    from utils.auth_supabase import get_quota_info
                     quota = get_quota_info()
                     if quota["is_trial"]:
                         st.info(f"🎁 Essai gratuit : {quota['remaining']} rapport(s) restant(s)")
@@ -915,25 +914,47 @@ with tab4:
                     st.error(f"❌ Claude API: {str(e)}")
 
                     error_str = str(e).lower()
-                    
+
                     if "timeout" in error_str:
                         st.info(
-                            "💡 Le modèle prend du temps. Réessayez ou utilisez llama3.2:3b" 
+                            "💡 Le service met du temps à répondre. Réessayez dans un instant."
                             if st.session_state.ui_lang == "fr"
-                            else "💡 Model is slow. Retry or use llama3.2:3b"
+                            else "💡 The service is slow to respond. Try again shortly."
                         )
                     elif "json" in error_str:
                         st.info(
-                            "💡 Réponse invalide du modèle. Essayez llama3.2:3b" 
+                            "💡 Réponse invalide du modèle. Réessayez."
                             if st.session_state.ui_lang == "fr"
-                            else "💡 Invalid model response. Try llama3.2:3b"
+                            else "💡 Invalid model response. Please retry."
                         )
                     elif "api key" in error_str or "401" in error_str:
                         st.info(
-                            "💡 Vérifiez votre clé API sur console.anthropic.com" 
+                            "💡 Vérifiez votre clé API sur console.anthropic.com"
                             if st.session_state.ui_lang == "fr"
                             else "💡 Check your API key at console.anthropic.com"
                         )
+
+                    # ==========================================
+                    # ✅ FILET DE SÉCURITÉ : mode basique si l'API échoue
+                    # Ne compte PAS dans le quota — l'échec n'est pas
+                    # imputable à l'utilisateur (transparence).
+                    # ==========================================
+                    st.warning(
+                        "⚠️ Basculement en mode basique (sans IA) suite à l'échec de l'API. "
+                        "**Ce rapport ne sera pas déduit de votre quota.**"
+                        if st.session_state.ui_lang == "fr"
+                        else "⚠️ Falling back to basic mode (no AI) after the API failure. "
+                        "**This report will not be deducted from your quota.**"
+                    )
+                    try:
+                        st.session_state.ai_insights = generate_basic_insights(
+                            analysis,
+                            lang=st.session_state.report_lang
+                        )
+                        # Pas d'increment_report_count() ici, volontairement
+                        st.rerun()
+                    except Exception as fallback_error:
+                        st.error(f"❌ {fallback_error}")
     
     # Affichage des insights
     if st.session_state.ai_insights:

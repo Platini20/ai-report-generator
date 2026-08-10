@@ -13,7 +13,7 @@ import streamlit as st
 import stripe
 
 from utils.auth_supabase import update_profile
-from plans_config import PLAN_CONFIGS
+from utils.plans_config import PLAN_CONFIGS
 
 stripe.api_key = st.secrets["STRIPE_SECRET_KEY"]
 

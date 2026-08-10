@@ -134,6 +134,9 @@ def show_manage_subscription_button():
             )
         except Exception as e:
             st.error(f"Erreur Stripe : {e}")
+
+
+def show_upgrade_button():
     """
     Affiche le bouton 'Passer Pro' dans la sidebar si l'utilisateur
     est en plan Trial. À appeler juste après show_quota_sidebar().

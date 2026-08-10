@@ -59,6 +59,88 @@ def update_profile(user_id: str, fields: Dict) -> None:
         st.warning(f"⚠️ Synchronisation profil échouée (non bloquant) : {e}")
 
 
+def request_password_reset(email: str) -> Tuple[bool, str]:
+    """Envoie un email de réinitialisation de mot de passe."""
+    try:
+        app_url = st.secrets["APP_URL"].rstrip("/")
+        get_auth_client().auth.reset_password_for_email(
+            email, {"redirect_to": app_url}
+        )
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def handle_password_recovery() -> bool:
+    """
+    À appeler tout en haut de app.py, AVANT check_login().
+    Si l'URL contient ?type=recovery&token_hash=..., affiche le
+    formulaire de nouveau mot de passe et retourne True (le script
+    principal doit alors s'arrêter avec st.stop()).
+    """
+    params = st.query_params
+    if params.get("type") != "recovery" or "token_hash" not in params:
+        return False
+
+    ui_lang = st.session_state.get("ui_lang", "fr")
+    token_hash = params["token_hash"]
+
+    st.markdown("## 🔑 " + ("Nouveau mot de passe" if ui_lang == "fr" else "New password"))
+    st.caption(
+        "Choisissez un nouveau mot de passe pour votre compte."
+        if ui_lang == "fr"
+        else "Choose a new password for your account."
+    )
+
+    with st.form("reset_password_form"):
+        new_password = st.text_input(
+            "Nouveau mot de passe" if ui_lang == "fr" else "New password", type="password"
+        )
+        confirm_password = st.text_input(
+            "Confirmer le mot de passe" if ui_lang == "fr" else "Confirm password", type="password"
+        )
+        submitted = st.form_submit_button(
+            "Valider" if ui_lang == "fr" else "Submit", type="primary"
+        )
+
+    if submitted:
+        if len(new_password) < 6:
+            st.error(
+                "Le mot de passe doit contenir au moins 6 caractères"
+                if ui_lang == "fr" else "Password must be at least 6 characters"
+            )
+        elif new_password != confirm_password:
+            st.error(
+                "Les mots de passe ne correspondent pas"
+                if ui_lang == "fr" else "Passwords do not match"
+            )
+        else:
+            try:
+                client = get_auth_client()
+                result = client.auth.verify_otp({"token_hash": token_hash, "type": "recovery"})
+                if result.session:
+                    client.auth.set_session(result.session.access_token, result.session.refresh_token)
+                    client.auth.update_user({"password": new_password})
+                    client.auth.sign_out()
+                    st.query_params.clear()
+                    st.success(
+                        "✅ Mot de passe mis à jour avec succès !"
+                        if ui_lang == "fr" else "✅ Password updated successfully!"
+                    )
+                    if st.button("Aller à la connexion" if ui_lang == "fr" else "Go to login"):
+                        st.rerun()
+                else:
+                    st.error(
+                        "Lien invalide ou expiré. Redemandez un lien depuis l'écran de connexion."
+                        if ui_lang == "fr"
+                        else "Invalid or expired link. Request a new one from the login screen."
+                    )
+            except Exception as e:
+                st.error(f"Erreur : {e}")
+
+    return True
+
+
 # ==========================================
 # AUTHENTIFICATION (UI)
 # ==========================================
@@ -99,6 +181,11 @@ def check_login() -> bool:
             'pricing_info': 'Tarifs après l\'essai',
             'pro_plan': 'Pro : 19,99$/mois (300 rapports)',
             'enterprise_plan': 'Enterprise : Sur devis (illimité)',
+            'forgot_password': 'Mot de passe oublié ?',
+            'forgot_password_title': '🔑 Réinitialiser le mot de passe',
+            'forgot_password_info': 'Entrez votre email, vous recevrez un lien pour choisir un nouveau mot de passe.',
+            'send_reset_link': 'Envoyer le lien',
+            'reset_email_sent': '✅ Email envoyé ! Vérifiez votre boîte de réception (et vos spams).',
         },
         'en': {
             'title': '🔒 Login',
@@ -128,6 +215,11 @@ def check_login() -> bool:
             'pricing_info': 'Pricing after trial',
             'pro_plan': 'Pro: $19.99/month (300 reports)',
             'enterprise_plan': 'Enterprise: Custom pricing (unlimited)',
+            'forgot_password': 'Forgot your password?',
+            'forgot_password_title': '🔑 Reset password',
+            'forgot_password_info': 'Enter your email, you will receive a link to choose a new password.',
+            'send_reset_link': 'Send reset link',
+            'reset_email_sent': '✅ Email sent! Check your inbox (and spam folder).',
         }
     }
     t = texts.get(ui_lang, texts['fr'])
@@ -256,8 +348,37 @@ def check_login() -> bool:
         """, unsafe_allow_html=True)
 
         show_register = st.session_state.get("show_register", False)
+        show_forgot = st.session_state.get("show_forgot_password", False)
 
-        if show_register:
+        if show_forgot:
+            st.markdown(f"### {t['forgot_password_title']}")
+            st.info(t['forgot_password_info'])
+
+            if st.session_state.get("reset_email_sent"):
+                st.success(t['reset_email_sent'])
+                if st.button(t['back_to_login'], use_container_width=True):
+                    st.session_state["show_forgot_password"] = False
+                    st.session_state["reset_email_sent"] = False
+                    st.rerun()
+            else:
+                st.text_input(t['email_label'], key="forgot_email", placeholder=t['email_placeholder'])
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(t['send_reset_link'], type="primary", use_container_width=True):
+                        email = st.session_state.get("forgot_email", "").strip().lower()
+                        if email:
+                            ok, err = request_password_reset(email)
+                            if ok:
+                                st.session_state["reset_email_sent"] = True
+                                st.rerun()
+                            else:
+                                st.error(err)
+                with col2:
+                    if st.button(t['back_to_login'], use_container_width=True):
+                        st.session_state["show_forgot_password"] = False
+                        st.rerun()
+
+        elif show_register:
             st.markdown(f"### {t['register_title']}")
             st.info(t['register_info'])
 
@@ -302,6 +423,10 @@ def check_login() -> bool:
                     st.session_state["show_register"] = True
                     st.session_state["auth_error"] = None
                     st.rerun()
+
+            if st.button(t['forgot_password'], use_container_width=True):
+                st.session_state["show_forgot_password"] = True
+                st.rerun()
 
         st.markdown("---")
         st.markdown(f"""
@@ -509,6 +634,8 @@ def logout():
         "authenticated", "user_id", "user_email", "access_token", "refresh_token",
         "user_plan", "reports_used", "reports_limit", "auth_error",
         "register_error", "register_success", "show_register",
+        "show_forgot_password", "reset_email_sent", "forgot_email",
+        "show_upgrade_success",
     ]
     for key in keys_to_delete:
         if key in st.session_state:

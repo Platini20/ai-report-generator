@@ -12,7 +12,7 @@ car ils peuvent survenir alors que l'utilisateur n'est pas dans l'app.
 import streamlit as st
 import stripe
 
-from utils.auth_supabase import update_profile
+from utils.auth_supabase import update_profile, get_profile
 from utils.plans_config import PLAN_CONFIGS
 
 stripe.api_key = st.secrets["STRIPE_SECRET_KEY"]
@@ -93,7 +93,47 @@ def handle_checkout_return():
         st.rerun()
 
 
-def show_upgrade_button():
+def create_portal_session(customer_id: str) -> str:
+    """Crée une session Stripe Customer Portal et retourne son URL."""
+    app_url = st.secrets["APP_URL"].rstrip("/")
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=f"{app_url}/",
+    )
+    return session.url
+
+
+def show_manage_subscription_button():
+    """
+    Affiche un bouton 'Gérer mon abonnement' pour les utilisateurs Pro,
+    qui ouvre le Stripe Customer Portal (annulation, moyen de paiement,
+    factures — tout géré par Stripe, rien à coder côté app).
+    """
+    if st.session_state.get("user_plan") != "pro":
+        return
+
+    ui_lang = st.session_state.get("ui_lang", "fr")
+    label = "⚙️ Gérer mon abonnement" if ui_lang == "fr" else "⚙️ Manage subscription"
+
+    if st.button(label, use_container_width=True):
+        try:
+            profile = get_profile(st.session_state["user_id"])
+            customer_id = profile.get("stripe_customer_id") if profile else None
+            if not customer_id:
+                st.error(
+                    "Aucun abonnement Stripe trouvé pour ce compte."
+                    if ui_lang == "fr"
+                    else "No Stripe subscription found for this account."
+                )
+                return
+            portal_url = create_portal_session(customer_id)
+            st.link_button(
+                "👉 Ouvrir le portail de gestion" if ui_lang == "fr" else "👉 Open management portal",
+                portal_url,
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.error(f"Erreur Stripe : {e}")
     """
     Affiche le bouton 'Passer Pro' dans la sidebar si l'utilisateur
     est en plan Trial. À appeler juste après show_quota_sidebar().

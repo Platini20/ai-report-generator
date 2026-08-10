@@ -20,14 +20,10 @@ from utils.auth_supabase import (
     show_upgrade_message,
     logout
 )
-from utils.stripe_checkout import handle_checkout_return, show_upgrade_button
 
 # Vérifier l'authentification AVANT tout
 if not check_login():
     st.stop()  # Bloquer si non authentifié
-
-# Traiter un éventuel retour de paiement Stripe (?checkout=success&session_id=...)
-handle_checkout_return()
 
 # ==========================================
 # Configuration de la page (APRÈS authentification)
@@ -313,17 +309,7 @@ with st.sidebar:
     # 🎁 AFFICHER QUOTA / ESSAI GRATUIT
     # ==========================================
     show_quota_sidebar()
-
-    if st.session_state.get("show_upgrade_success"):
-        st.success(
-            "🎉 Bienvenue dans le plan Pro ! Votre quota a été mis à jour."
-            if st.session_state.ui_lang == "fr"
-            else "🎉 Welcome to the Pro plan! Your quota has been updated."
-        )
-        st.session_state["show_upgrade_success"] = False
-
-    show_upgrade_button()
-
+    
     st.markdown("---")
     
     st.markdown(f"### {t('upload', st.session_state.ui_lang)}")

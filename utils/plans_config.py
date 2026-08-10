@@ -29,7 +29,8 @@ PLAN_CONFIGS = {
         "export_formats": ["HTML", "Word", "PDF"],
         "max_visualizations": -1,        # illimité
         "price": 19.99,
-        "stripe_price_id": None,         # sera rempli en Phase 2 (Stripe Checkout)
+        "stripe_price_id": None,         # ℹ️ Le vrai Price ID vit dans st.secrets["STRIPE_PRICE_ID_PRO"]
+                                          # (pas ici, pour éviter de committer des IDs dans Git)
         "icon": "🚀",
     },
     "enterprise": {

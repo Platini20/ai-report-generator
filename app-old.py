@@ -18,9 +18,15 @@ from utils.auth_supabase import (
     increment_report_count,
     show_quota_sidebar,
     show_upgrade_message,
+    handle_password_recovery,
     logout
 )
-from utils.stripe_checkout import handle_checkout_return, show_upgrade_button
+from utils.stripe_checkout import handle_checkout_return, show_upgrade_button, show_manage_subscription_button
+
+# Gérer un éventuel lien de réinitialisation de mot de passe AVANT tout,
+# même si l'utilisateur n'est pas connecté.
+if handle_password_recovery():
+    st.stop()
 
 # Vérifier l'authentification AVANT tout
 if not check_login():
@@ -323,6 +329,7 @@ with st.sidebar:
         st.session_state["show_upgrade_success"] = False
 
     show_upgrade_button()
+    show_manage_subscription_button()
 
     st.markdown("---")
     

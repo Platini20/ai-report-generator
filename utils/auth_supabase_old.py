@@ -74,53 +74,16 @@ def request_password_reset(email: str) -> Tuple[bool, str]:
 def handle_password_recovery() -> bool:
     """
     À appeler tout en haut de app.py, AVANT check_login().
-    Si l'URL contient ?type=recovery&token_hash=..., vérifie le lien
-    UNE SEULE FOIS (les liens sont à usage unique), stocke la session
-    obtenue, puis affiche le formulaire de nouveau mot de passe.
-    Les réessais (ex: mot de passe identique refusé) réutilisent cette
-    session déjà établie au lieu de re-vérifier le lien.
-    Retourne True si le script principal doit s'arrêter (st.stop()).
+    Si l'URL contient ?type=recovery&token_hash=..., affiche le
+    formulaire de nouveau mot de passe et retourne True (le script
+    principal doit alors s'arrêter avec st.stop()).
     """
-    ui_lang = st.session_state.get("ui_lang", "en")
-
-    # Session de récupération déjà établie : afficher directement le formulaire
-    if st.session_state.get("recovery_active"):
-        return _render_recovery_form(ui_lang)
-
     params = st.query_params
     if params.get("type") != "recovery" or "token_hash" not in params:
         return False
 
+    ui_lang = st.session_state.get("ui_lang", "fr")
     token_hash = params["token_hash"]
-    client = get_auth_client()
-
-    try:
-        result = client.auth.verify_otp({"token_hash": token_hash, "type": "recovery"})
-    except Exception:
-        result = None
-
-    st.query_params.clear()  # le lien ne doit plus jamais être réutilisé
-
-    if not result or not result.session:
-        st.error(
-            "Lien invalide ou expiré. Redemandez un lien depuis l'écran de connexion."
-            if ui_lang == "fr"
-            else "Invalid or expired link. Request a new one from the login screen."
-        )
-        return True
-
-    # Token consommé UNE FOIS ici — la session est conservée pour les réessais
-    st.session_state["recovery_access_token"] = result.session.access_token
-    st.session_state["recovery_refresh_token"] = result.session.refresh_token
-    st.session_state["recovery_active"] = True
-
-    return _render_recovery_form(ui_lang)
-
-
-def _render_recovery_form(ui_lang: str) -> bool:
-    """Affiche le formulaire de nouveau mot de passe, en réutilisant la
-    session de récupération déjà établie (pas de re-vérification du lien)."""
-    _language_switcher()
 
     st.markdown("## 🔑 " + ("Nouveau mot de passe" if ui_lang == "fr" else "New password"))
     st.caption(
@@ -154,47 +117,28 @@ def _render_recovery_form(ui_lang: str) -> bool:
         else:
             try:
                 client = get_auth_client()
-                client.auth.set_session(
-                    st.session_state["recovery_access_token"],
-                    st.session_state["recovery_refresh_token"],
-                )
-                client.auth.update_user({"password": new_password})
-                client.auth.sign_out()
-
-                for key in ["recovery_active", "recovery_access_token", "recovery_refresh_token"]:
-                    st.session_state.pop(key, None)
-
-                st.success(
-                    "✅ Mot de passe mis à jour avec succès !"
-                    if ui_lang == "fr" else "✅ Password updated successfully!"
-                )
-                if st.button("Aller à la connexion" if ui_lang == "fr" else "Go to login"):
-                    st.rerun()
+                result = client.auth.verify_otp({"token_hash": token_hash, "type": "recovery"})
+                if result.session:
+                    client.auth.set_session(result.session.access_token, result.session.refresh_token)
+                    client.auth.update_user({"password": new_password})
+                    client.auth.sign_out()
+                    st.query_params.clear()
+                    st.success(
+                        "✅ Mot de passe mis à jour avec succès !"
+                        if ui_lang == "fr" else "✅ Password updated successfully!"
+                    )
+                    if st.button("Aller à la connexion" if ui_lang == "fr" else "Go to login"):
+                        st.rerun()
+                else:
+                    st.error(
+                        "Lien invalide ou expiré. Redemandez un lien depuis l'écran de connexion."
+                        if ui_lang == "fr"
+                        else "Invalid or expired link. Request a new one from the login screen."
+                    )
             except Exception as e:
-                # Session de récupération conservée : l'utilisateur peut réessayer
-                # (ex: "New password should be different from the old password")
                 st.error(f"Erreur : {e}")
 
     return True
-
-
-def _language_switcher():
-    """Petit sélecteur de langue, utilisable AVANT connexion (login, register,
-    mot de passe oublié, reset de mot de passe)."""
-    current = st.session_state.get("ui_lang", "en")
-    col1, col2 = st.columns([3, 1])
-    with col2:
-        new_lang = st.selectbox(
-            "🌍",
-            options=["en", "fr"],
-            format_func=lambda x: "🇬🇧 EN" if x == "en" else "🇫🇷 FR",
-            index=0 if current == "en" else 1,
-            key="lang_switcher_pre_auth",
-            label_visibility="collapsed",
-        )
-    if new_lang != current:
-        st.session_state["ui_lang"] = new_lang
-        st.rerun()
 
 
 # ==========================================
@@ -206,7 +150,7 @@ def check_login() -> bool:
     Affiche le formulaire de connexion/inscription si nécessaire.
     Retourne True si l'utilisateur est authentifié.
     """
-    ui_lang = st.session_state.get("ui_lang", "en")
+    ui_lang = st.session_state.get("ui_lang", "fr")
 
     texts = {
         'fr': {
@@ -278,7 +222,7 @@ def check_login() -> bool:
             'reset_email_sent': '✅ Email sent! Check your inbox (and spam folder).',
         }
     }
-    t = texts.get(ui_lang, texts['en'])
+    t = texts.get(ui_lang, texts['fr'])
 
     def _load_session_into_state(user, session, profile):
         st.session_state["authenticated"] = True
@@ -367,8 +311,6 @@ def check_login() -> bool:
     # Déjà authentifié
     if st.session_state.get("authenticated"):
         return True
-
-    _language_switcher()
 
     st.markdown("""
         <style>
@@ -562,7 +504,7 @@ def show_quota_sidebar():
     if not st.session_state.get("authenticated"):
         return
 
-    ui_lang = st.session_state.get("ui_lang", "en")
+    ui_lang = st.session_state.get("ui_lang", "fr")
     quota = get_quota_info()
     plan_config = get_plan(quota["plan"])
 
@@ -624,7 +566,7 @@ def show_quota_sidebar():
 
 
 def show_upgrade_message():
-    ui_lang = st.session_state.get("ui_lang", "en")
+    ui_lang = st.session_state.get("ui_lang", "fr")
     quota = get_quota_info()
 
     st.error("🚫 **" + ("Limite atteinte" if ui_lang == 'fr' else "Limit reached") + "**")
@@ -694,7 +636,6 @@ def logout():
         "register_error", "register_success", "show_register",
         "show_forgot_password", "reset_email_sent", "forgot_email",
         "show_upgrade_success",
-        "recovery_active", "recovery_access_token", "recovery_refresh_token",
     ]
     for key in keys_to_delete:
         if key in st.session_state:

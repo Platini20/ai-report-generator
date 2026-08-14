@@ -23,6 +23,10 @@ from utils.auth_supabase import (
 )
 from utils.stripe_checkout import handle_checkout_return, show_upgrade_button, show_manage_subscription_button
 
+# Langue par défaut AVANT tout affichage (connexion, reset mot de passe inclus)
+if "ui_lang" not in st.session_state:
+    st.session_state.ui_lang = "en"
+
 # Gérer un éventuel lien de réinitialisation de mot de passe AVANT tout,
 # même si l'utilisateur n'est pas connecté.
 if handle_password_recovery():
@@ -149,8 +153,8 @@ def tr(key: str, lang: str = 'fr') -> str:
 def init_session_state():
     """Initialise toutes les variables de session"""
     defaults = {
-        'ui_lang': 'fr',
-        'report_lang': 'fr',
+        'ui_lang': 'en',
+        'report_lang': 'en',
         'export_format': 'HTML',
         'df': None,
         'df_original': None,

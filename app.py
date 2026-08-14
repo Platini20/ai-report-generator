@@ -354,8 +354,8 @@ with st.sidebar:
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                     padding: 12px; border-radius: 8px; margin-bottom: 15px;">
             <p style="color: white; margin: 0; font-size: 0.9rem; text-align: center;">
-                <strong>💡 Recommandé</strong><br>
-                Utilisez <strong>Anthropic API</strong> pour des insights de haute qualité <br>
+                <strong>💡 </strong><br>
+                Utilise <strong> Anthropic API</strong> pour des insights de haute qualité <br>
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -364,8 +364,8 @@ with st.sidebar:
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                     padding: 12px; border-radius: 8px; margin-bottom: 15px;">
             <p style="color: white; margin: 0; font-size: 0.9rem; text-align: center;">
-                <strong>💡 Recommended</strong><br>
-                Use <strong>Anthropic API</strong> for high-quality insights <br> 
+                <strong>💡 </strong><br>
+                Use <strong> Anthropic API</strong> for high-quality insights <br> 
             </p>
         </div>
         """, unsafe_allow_html=True)

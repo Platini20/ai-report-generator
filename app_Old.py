@@ -163,7 +163,6 @@ def init_session_state():
         'ai_insights': None,
         'visualizations': None,
         '_last_uploaded_name': None,
-        'chat_history': [],
     }
     
     for key, value in defaults.items():
@@ -209,7 +208,6 @@ def reset_analysis_on_new_file(current_name: str):
         st.session_state.analysis = None
         st.session_state.ai_insights = None
         st.session_state.visualizations = None
-        st.session_state.chat_history = []
         st.session_state._last_uploaded_name = current_name
 
 
@@ -943,7 +941,6 @@ with tab4:
                         api_key, 
                         lang=st.session_state.report_lang
                     )
-                    st.session_state.chat_history = []  # nouveau rapport = nouvelle conversation
                     
                     st.success(
                         "✅ Insights générés !" 
@@ -1005,7 +1002,6 @@ with tab4:
                             analysis,
                             lang=st.session_state.report_lang
                         )
-                        st.session_state.chat_history = []
                         # Pas d'increment_report_count() ici, volontairement
                         st.rerun()
                     except Exception as fallback_error:
@@ -1070,65 +1066,6 @@ with tab4:
         
         st.subheader("Conclusion")
         st.markdown(f"_{insights.get('conclusion','')}_")
-
-        # ==========================================
-        # 💬 CHAT CONVERSATIONNEL SUR LE RAPPORT
-        # ==========================================
-        st.markdown("---")
-        st.subheader(
-            "💬 Poser une question sur ce rapport"
-            if st.session_state.ui_lang == "fr"
-            else "💬 Ask a question about this report"
-        )
-        st.caption(
-            "Discutez avec l'IA à partir des statistiques et du rapport déjà générés (pas des lignes brutes du fichier)."
-            if st.session_state.ui_lang == "fr"
-            else "Chat with the AI based on the statistics and report already generated (not the raw file rows)."
-        )
-
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
-
-        if st.session_state.chat_history:
-            if st.button(
-                "🗑️ Effacer la conversation" if st.session_state.ui_lang == "fr" else "🗑️ Clear conversation",
-                key="clear_chat_btn",
-            ):
-                st.session_state.chat_history = []
-                st.rerun()
-
-        for msg in st.session_state.chat_history:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-
-        user_question = st.chat_input(
-            "Posez votre question..." if st.session_state.ui_lang == "fr" else "Ask your question..."
-        )
-
-        if user_question:
-            st.session_state.chat_history.append({"role": "user", "content": user_question})
-            with st.chat_message("user"):
-                st.markdown(user_question)
-
-            with st.chat_message("assistant"):
-                with st.spinner("..."):
-                    try:
-                        from utils.report_chat import chat_about_report
-                        api_key = st.secrets.get("anthropic", {}).get("api_key", "")
-                        reply = chat_about_report(
-                            analysis=analysis,
-                            ai_insights=insights,
-                            chat_history=st.session_state.chat_history[:-1],  # sans la dernière question (déjà passée en user_question)
-                            user_question=user_question,
-                            api_key=api_key,
-                            lang=st.session_state.report_lang,
-                        )
-                        st.markdown(reply)
-                        st.session_state.chat_history.append({"role": "assistant", "content": reply})
-                    except Exception as e:
-                        error_reply = f"❌ {e}"
-                        st.error(error_reply)
-                        st.session_state.chat_history.append({"role": "assistant", "content": error_reply})
 
 
 # ==========================================

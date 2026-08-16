@@ -354,8 +354,8 @@ with st.sidebar:
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                     padding: 12px; border-radius: 8px; margin-bottom: 15px;">
             <p style="color: white; margin: 0; font-size: 0.9rem; text-align: center;">
-                <strong>💡 </strong><br>
-                Utilise <strong> Anthropic API</strong> pour des insights de haute qualité <br>
+                <strong>💡 Recommandé</strong><br>
+                Utilisez <strong>Anthropic API</strong> pour des insights de haute qualité <br>
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -364,8 +364,8 @@ with st.sidebar:
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                     padding: 12px; border-radius: 8px; margin-bottom: 15px;">
             <p style="color: white; margin: 0; font-size: 0.9rem; text-align: center;">
-                <strong>💡 </strong><br>
-                Use <strong> Anthropic API</strong> for high-quality insights <br> 
+                <strong>💡 Recommended</strong><br>
+                Use <strong>Anthropic API</strong> for high-quality insights <br> 
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -639,20 +639,20 @@ with tab1:
                     else "These columns contain no data and will be excluded from visualizations."
                 )
         
-        # Colonnes quasi-vides (≥90%)
+        # Colonnes quasi-vides (90-99%, exclut les 100% déjà listées ci-dessus)
         if anomaly_report['quasi_empty_columns']['count'] > 0:
             with st.expander(
-                f"⚠️ {anomaly_report['quasi_empty_columns']['count']} Colonne(s) Quasi-Vides (≥90%)" 
+                f"⚠️ {anomaly_report['quasi_empty_columns']['count']} Colonne(s) Quasi-Vides (90-99%)" 
                 if st.session_state.ui_lang == "fr"
-                else f"⚠️ {anomaly_report['quasi_empty_columns']['count']} Quasi-Empty Column(s) (≥90%)",
+                else f"⚠️ {anomaly_report['quasi_empty_columns']['count']} Quasi-Empty Column(s) (90-99%)",
                 expanded=False
             ):
                 cols_str = ", ".join(anomaly_report['quasi_empty_columns']['columns'])
                 st.write(cols_str)
                 st.caption(
-                    "Ces colonnes ont ≥90% de valeurs manquantes et seront exclues des visualisations."
+                    "Ces colonnes ont entre 90% et 99% de valeurs manquantes (hors 100%, listées ci-dessus) et seront exclues des visualisations."
                     if st.session_state.ui_lang == "fr"
-                    else "These columns have ≥90% missing values and will be excluded from visualizations."
+                    else "These columns have between 90% and 99% missing values (100% listed above) and will be excluded from visualizations."
                 )
         
         # Doublons
@@ -663,12 +663,12 @@ with tab1:
                 else f"🔄 {anomaly_report['duplicates']['count']:,} duplicate row(s) ({anomaly_report['duplicates']['percentage']:.1f}%)"
             )
         
-        # Valeurs manquantes importantes (>50%)
+        # Valeurs manquantes importantes (50-89%, exclut ≥90% déjà listées ci-dessus)
         if anomaly_report['high_missing_values']:
             with st.expander(
-                f"📊 {len(anomaly_report['high_missing_values'])} Colonne(s) avec >50% de Valeurs Manquantes"
+                f"📊 {len(anomaly_report['high_missing_values'])} Colonne(s) avec 50-89% de Valeurs Manquantes"
                 if st.session_state.ui_lang == "fr"
-                else f"📊 {len(anomaly_report['high_missing_values'])} Column(s) with >50% Missing Values",
+                else f"📊 {len(anomaly_report['high_missing_values'])} Column(s) with 50-89% Missing Values",
                 expanded=False
             ):
                 for item in anomaly_report['high_missing_values']:
@@ -764,10 +764,30 @@ with tab2:
             if st.session_state.ui_lang == "fr" 
             else "🏷️ Category Distribution"
         )
-        
-        for col_name, info in list(analysis.get("categorical_summary", {}).items())[:5]:
+
+        all_cat_cols = analysis.get("categorical_summary", {})
+        analyzed_count = len(all_cat_cols)
+        total_cat_cols_in_data = len(analysis.get("categorical_cols", []))
+        shown_cat_cols = list(all_cat_cols.items())[:5]
+
+        if total_cat_cols_in_data > analyzed_count:
+            st.caption(
+                f"ℹ️ Analyse limitée aux {analyzed_count} premières variables catégorielles sur {total_cat_cols_in_data} au total dans le fichier."
+                if st.session_state.ui_lang == "fr"
+                else f"ℹ️ Analysis limited to the first {analyzed_count} categorical variables out of {total_cat_cols_in_data} total in the file."
+            )
+
+        if analyzed_count > 5:
+            st.caption(
+                f"ℹ️ Affichage des 5 premières variables analysées sur {analyzed_count}."
+                if st.session_state.ui_lang == "fr"
+                else f"ℹ️ Showing the first 5 analyzed variables out of {analyzed_count}."
+            )
+
+        for col_name, info in shown_cat_cols:
             with st.expander(f"📌 {col_name}"):
                 top_values = info.get("top_values", [])
+                unique_count = info.get("unique_count", len(top_values))
                 if top_values:
                     dist_df = pd.DataFrame(
                         top_values,
@@ -777,6 +797,12 @@ with tab2:
                         ]
                     )
                     st.dataframe(dist_df, use_container_width=True)
+                    if unique_count > len(top_values):
+                        st.caption(
+                            f"ℹ️ Top {len(top_values)} affiché(es) sur {unique_count} catégories uniques au total."
+                            if st.session_state.ui_lang == "fr"
+                            else f"ℹ️ Showing top {len(top_values)} out of {unique_count} unique categories total."
+                        )
 
 
 # ==========================================

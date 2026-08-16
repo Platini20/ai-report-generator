@@ -97,7 +97,9 @@ def clean_and_preprocess(df: pd.DataFrame, lang: str = 'fr') -> Tuple[pd.DataFra
     # 3. DÉTECTER LES COLONNES QUASI-VIDES (≥90%)
     # ==========================================
     missing_pct = (df_cleaned.isnull().sum() / len(df_cleaned) * 100)
-    quasi_empty = missing_pct[missing_pct >= 90].index.tolist()
+    # ✅ [90%, 100%[ uniquement — les colonnes 100% vides sont déjà comptées
+    # dans empty_cols, on évite qu'une même colonne apparaisse dans les deux.
+    quasi_empty = missing_pct[(missing_pct >= 90) & (missing_pct < 100)].index.tolist()
     
     if quasi_empty:
         cleaning_report['quasi_empty_cols'] = quasi_empty
@@ -330,9 +332,11 @@ def get_detailed_anomaly_report(cleaning_report: Dict[str, Any], lang: str = 'fr
         'high_missing_values': []
     }
     
-    # Colonnes avec >50% valeurs manquantes
+    # Colonnes avec >50% et <90% valeurs manquantes uniquement — les colonnes
+    # ≥90% sont déjà comptées dans empty_columns / quasi_empty_columns,
+    # on évite qu'une même colonne apparaisse dans plusieurs catégories.
     for col, info in cleaning_report.get('missing_values', {}).items():
-        if info['percentage'] > 50:
+        if 50 < info['percentage'] < 90:
             report['high_missing_values'].append({
                 'column': col,
                 'percentage': info['percentage']

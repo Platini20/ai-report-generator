@@ -164,6 +164,8 @@ def init_session_state():
         'visualizations': None,
         '_last_uploaded_name': None,
         'chat_history': [],
+        'featured_charts': None,
+        '_featured_for': None,
     }
     
     for key, value in defaults.items():
@@ -210,6 +212,8 @@ def reset_analysis_on_new_file(current_name: str):
         st.session_state.ai_insights = None
         st.session_state.visualizations = None
         st.session_state.chat_history = []
+        st.session_state.featured_charts = None
+        st.session_state._featured_for = None
         st.session_state._last_uploaded_name = current_name
 
 
@@ -836,7 +840,7 @@ with tab3:
             )
             
     visualizations = st.session_state.visualizations
-    
+
     if not visualizations:
         st.warning(
             "⚠️ Aucune visualisation disponible" 
@@ -844,19 +848,72 @@ with tab3:
             else "⚠️ No visualizations available"
         )
     else:
-        for viz_name, (fig, interpretation) in visualizations.items():
-            viz_title = viz_name.replace('_', ' ').title()
-            
-            st.subheader(viz_title)
+        from utils.chart_curator import select_featured_charts, get_viz_title
+
+        if st.session_state.get("featured_charts") is None or st.session_state.get("_featured_for") != st.session_state._last_uploaded_name:
+            api_key = st.secrets.get("anthropic", {}).get("api_key", "")
+            st.session_state.featured_charts = select_featured_charts(
+                visualizations, api_key, lang=st.session_state.report_lang
+            )
+            st.session_state._featured_for = st.session_state._last_uploaded_name
+
+        featured = st.session_state.featured_charts
+        featured_keys = {item["key"] for item in featured}
+
+        # ==========================================
+        # 🌟 GRAPHIQUES COUP DE CŒUR
+        # ==========================================
+        st.subheader(
+            "🌟 Graphiques coup de cœur" if st.session_state.ui_lang == "fr" else "🌟 Featured charts"
+        )
+        st.caption(
+            "Sélection des visualisations les plus parlantes pour ce dataset."
+            if st.session_state.ui_lang == "fr"
+            else "The most insightful visualizations for this dataset."
+        )
+
+        for item in featured:
+            key = item["key"]
+            if key not in visualizations:
+                continue
+            fig, interpretation = visualizations[key]
+
+            st.markdown(f"#### {get_viz_title(key, st.session_state.report_lang)}")
             st.pyplot(fig, use_container_width=True)
-            
+
+            if item.get("reason"):
+                st.markdown(
+                    f'<div class="insight-box">🌟 {item["reason"]}</div>',
+                    unsafe_allow_html=True
+                )
             if interpretation:
                 st.markdown(
                     f'<div class="insight-box">💡 {interpretation}</div>',
                     unsafe_allow_html=True
                 )
-            
             st.markdown("---")
+
+        # ==========================================
+        # 📊 TOUS LES GRAPHIQUES (exhaustif, replié)
+        # ==========================================
+        remaining = {k: v for k, v in visualizations.items() if k not in featured_keys}
+        if remaining:
+            with st.expander(
+                f"📊 Voir tous les graphiques ({len(remaining)} de plus)"
+                if st.session_state.ui_lang == "fr"
+                else f"📊 See all charts ({len(remaining)} more)",
+                expanded=False,
+            ):
+                for viz_name, (fig, interpretation) in remaining.items():
+                    st.subheader(get_viz_title(viz_name, st.session_state.report_lang))
+                    st.pyplot(fig, use_container_width=True)
+
+                    if interpretation:
+                        st.markdown(
+                            f'<div class="insight-box">💡 {interpretation}</div>',
+                            unsafe_allow_html=True
+                        )
+                    st.markdown("---")
 
 
 # ==========================================

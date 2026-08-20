@@ -230,29 +230,6 @@ def show_home_screen(lang: str):
                 else "Téléchargez un fichier dans la barre latérale pour commencer"
             )
         )
-
-        st.markdown(
-            "<div style='text-align:center; margin: 0.5rem 0; color:#6b7280;'>"
-            + ("— ou —" if lang == "fr" else "— or —")
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-
-        if st.button(
-            "🎯 " + ("Essayer avec un fichier d'exemple (gratuit, sans upload)" if lang == "fr"
-                     else "Try with a sample file (free, no upload needed)"),
-            type="primary",
-            use_container_width=True,
-            key="home_example_btn",
-        ):
-            st.session_state["_use_example_file"] = True
-            st.rerun()
-
-        st.caption(
-            "Pas de fichier sous la main ? Testez l'app en 2 clics avec un jeu de données de ventes fictif."
-            if lang == "fr"
-            else "Don't have a file handy? Try the app in 2 clicks with a sample sales dataset."
-        )
     
     st.markdown("---")
     
@@ -1084,10 +1061,8 @@ with tab4:
                         )
                     elif quota["is_trial"]:
                         st.info(f"🎁 Essai gratuit : {quota['remaining']} rapport(s) restant(s)")
-                    # Pas de st.rerun() ici volontairement : st.rerun() réinitialise
-                    # l'onglet actif au premier (limitation de st.tabs()). Le script
-                    # continue naturellement et affiche les insights plus bas, sur
-                    # le même onglet Insights.
+                    
+                    st.rerun()
                 
                 except Exception as e:
                     st.error(f"❌ Claude API: {str(e)}")
@@ -1131,8 +1106,8 @@ with tab4:
                             lang=st.session_state.report_lang
                         )
                         st.session_state.chat_history = []
-                        # Pas d'increment_report_count() ni de st.rerun() ici,
-                        # volontairement (voir note plus haut sur st.tabs()).
+                        # Pas d'increment_report_count() ici, volontairement
+                        st.rerun()
                     except Exception as fallback_error:
                         st.error(f"❌ {fallback_error}")
     
@@ -1220,8 +1195,7 @@ with tab4:
                 key="clear_chat_btn",
             ):
                 st.session_state.chat_history = []
-                # Pas de st.rerun() : la boucle d'affichage juste en dessous
-                # reflète déjà la liste vide dans cette même exécution.
+                st.rerun()
 
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):

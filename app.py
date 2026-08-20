@@ -166,6 +166,7 @@ def init_session_state():
         'chat_history': [],
         'featured_charts': None,
         '_featured_for': None,
+        '_use_example_file': False,
     }
     
     for key, value in defaults.items():
@@ -349,6 +350,21 @@ with st.sidebar:
         type=["csv", "xlsx", "xls", "json", "parquet"],
         help="CSV, Excel, JSON, Parquet",
     )
+
+    st.caption(
+        "Pas de fichier sous la main ?" if st.session_state.ui_lang == "fr"
+        else "Don't have a file handy?"
+    )
+    if st.button(
+        "🎯 Essayer avec un exemple" if st.session_state.ui_lang == "fr" else "🎯 Try with an example",
+        use_container_width=True,
+    ):
+        st.session_state["_use_example_file"] = True
+        st.rerun()
+
+    # Un vrai upload prend toujours le dessus sur le mode exemple
+    if uploaded_file is not None:
+        st.session_state["_use_example_file"] = False
     
     st.markdown("---")
     
@@ -437,6 +453,15 @@ with st.sidebar:
 # ==========================================
 # MAIN - TRAITEMENT DES DONNÉES
 # ==========================================
+
+if st.session_state.get("_use_example_file"):
+    from utils.sample_data import get_example_file
+    uploaded_file = get_example_file(st.session_state.ui_lang)
+    st.info(
+        "🎯 Vous explorez un jeu de données d'exemple (ventes trimestrielles). Uploadez votre propre fichier à tout moment pour repartir sur vos données."
+        if st.session_state.ui_lang == "fr"
+        else "🎯 You're exploring a sample dataset (quarterly sales). Upload your own file anytime to switch to your data."
+    )
 
 if uploaded_file is None:
     show_home_screen(st.session_state.ui_lang)
@@ -967,10 +992,20 @@ with tab4:
         can_generate = api_key is not None
         
         if st.button("🚀 Générer les Insights IA" if st.session_state.ui_lang == "fr" else "🚀 Generate AI Insights"):
+            is_example = st.session_state.get("_use_example_file", False)
+
             # ==========================================
             # ✅ VÉRIFIER QUOTA AVANT GÉNÉRATION
+            # (sauf pour le dataset d'exemple, toujours gratuit)
             # =========================================
-            can_generate_report_bool, quota_message = can_generate_report()
+            if is_example:
+                can_generate_report_bool, quota_message = True, (
+                    "Rapport d'exemple — gratuit, ne compte pas dans votre quota."
+                    if st.session_state.ui_lang == "fr"
+                    else "Example report — free, does not count toward your quota."
+                )
+            else:
+                can_generate_report_bool, quota_message = can_generate_report()
             
             if not can_generate_report_bool:
                 # Quota épuisé
@@ -1010,13 +1045,21 @@ with tab4:
                     
                     # ==========================================
                     # ✅ INCRÉMENTER LE COMPTEUR DE RAPPORTS
+                    # (sauf pour le dataset d'exemple)
                     # ==========================================
-                    increment_report_count()
+                    if not is_example:
+                        increment_report_count()
                     
                     # Afficher quota restant
                     from utils.auth_supabase import get_quota_info
                     quota = get_quota_info()
-                    if quota["is_trial"]:
+                    if is_example:
+                        st.info(
+                            "🎯 Rapport d'exemple généré — gratuit, non déduit de votre quota."
+                            if st.session_state.ui_lang == "fr"
+                            else "🎯 Example report generated — free, not deducted from your quota."
+                        )
+                    elif quota["is_trial"]:
                         st.info(f"🎁 Essai gratuit : {quota['remaining']} rapport(s) restant(s)")
                     
                     st.rerun()

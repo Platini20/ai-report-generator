@@ -493,6 +493,27 @@ from utils.plans_config import get_plan
 _current_plan = get_plan(st.session_state.get("user_plan", "trial"))
 _is_example = st.session_state.get("_use_example_file", False)
 
+def show_file_limit_upgrade_message(plan_id: str):
+    """Message d'upgrade contextuel pour une limite de FICHIER dépassée
+    (taille ou lignes) — distinct du quota de rapports (show_upgrade_message)."""
+    lang = st.session_state.ui_lang
+    if plan_id == "trial":
+        st.info(
+            "💡 Passez au plan **Pro** (19,99$/mois) pour uploader des fichiers jusqu'à 200 MB / 300 000 lignes."
+            if lang == "fr"
+            else "💡 Upgrade to the **Pro** plan ($19.99/mo) to upload files up to 200 MB / 300,000 rows."
+        )
+    else:
+        st.info(
+            "💡 Passez au plan **Enterprise** (sur devis) pour des fichiers de taille illimitée."
+            if lang == "fr"
+            else "💡 Upgrade to the **Enterprise** plan (custom pricing) for unlimited file sizes."
+        )
+        st.caption(
+            "📧 Contact : agouanetf@yahoo.com" if lang == "fr" else "📧 Contact: agouanetf@yahoo.com"
+        )
+
+
 if not _is_example and st.session_state.df is None:
     _max_mb = _current_plan.get("max_file_size_mb", -1)
     if _max_mb != -1:
@@ -503,7 +524,7 @@ if not _is_example and st.session_state.df is None:
                 if st.session_state.ui_lang == "fr"
                 else f"🚫 File too large ({_file_size_mb:.1f} MB) for your {_current_plan['name']} plan (limit: {_max_mb} MB)."
             )
-            show_upgrade_message()
+            show_file_limit_upgrade_message(st.session_state.get("user_plan", "trial"))
             st.stop()
 
 # Charger et nettoyer les données (une seule fois)
@@ -530,7 +551,7 @@ if st.session_state.df is None:
                         if st.session_state.ui_lang == "fr"
                         else f"🚫 File has too many rows ({len(df_raw):,}) for your {_current_plan['name']} plan (limit: {_max_rows:,} rows)."
                     )
-                    show_upgrade_message()
+                    show_file_limit_upgrade_message(st.session_state.get("user_plan", "trial"))
                     st.session_state._last_uploaded_name = None  # permet de réessayer avec un autre fichier
                     st.stop()
 

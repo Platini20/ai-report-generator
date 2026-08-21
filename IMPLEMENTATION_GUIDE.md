@@ -1,449 +1,120 @@
-# 🎯 Guide d'Implémentation - Version Commerciale avec Plans
+# 🎯 Guide Technique & Opérationnel (interne)
 
-## 📁 Fichiers Créés
-
-J'ai créé **3 nouveaux fichiers** pour toi :
-
-### 1. ✅ `utils/subscription.py`
-**Déjà créé précédemment** - Module de gestion des plans d'abonnement
-- Plans : Starter ($29), Pro ($99), Enterprise ($299)
-- Fonctions de vérification des limites
-- Messages d'upgrade
-- Tableau comparatif
-
-### 2. ✅ `app_commercial.py` (NOUVEAU)
-**Le nouveau fichier principal** - Remplace `app.py`
-- Intègre l'authentification existante
-- Ajoute les limites par plan
-- Vérifie taille fichier, nombre lignes, formats export
-- Limite visualisations selon plan
-- Messages d'upgrade contextuels
-
-### 3. ✅ `auth_trial_updated.py` (NOUVEAU)
-**Remplace `auth_trial.py`** - Système d'auth mis à jour
-- Support des 4 plans : Trial, Starter, Pro, Enterprise
-- Configuration centralisée des plans (PLAN_CONFIGS)
-- Gestion cohérente des quotas
-- Messages d'upgrade détaillés
+Ce document remplace l'ancien guide d'implémentation (qui référençait des fichiers obsolètes : `subscription.py`, `app_commercial.py`, `auth_trial_updated.py`, un système à 4 plans avec Ollama). Il décrit l'architecture **actuelle**, comment elle a été construite, et les procédures opérationnelles pour Franklin (seul développeur).
 
 ---
 
-## 🔄 Actions à Effectuer
-
-### Étape 1 : Copier les Fichiers
-
-```bash
-# Dans ton dossier utils/
-cp subscription.py utils/subscription.py
-
-# Remplacer auth_trial.py
-cp auth_trial_updated.py utils/auth_trial.py
-
-# Remplacer app.py
-cp app_commercial.py app.py
-```
-
-### Étape 2 : Vérifier la Structure
-
-Ta structure de fichiers devrait être :
+## 🗺️ Vue d'ensemble du flux
 
 ```
-report-generator/
-├── app.py                    # ← NOUVEAU (remplace l'ancien)
-├── config.py
-├── requirements.txt
-├── utils/
-│   ├── __init__.py
-│   ├── auth_trial.py        # ← MIS À JOUR
-│   ├── subscription.py      # ← NOUVEAU
-│   ├── data_loader.py
-│   ├── data_cleaner.py
-│   ├── analyzer.py
-│   ├── visualizations.py
-│   ├── ai_insights.py
-│   └── local_llm.py
-└── exports/
-    ├── __init__.py
-    ├── html_export.py
-    └── word_export.py
+Utilisateur (navigateur)
+    │
+    ▼
+Streamlit Community Cloud (app.py)
+    │
+    ├──► Supabase Auth ──► inscription / connexion / reset mot de passe
+    │         │
+    │         ▼
+    │    Table "profiles" (plan, quota, infos Stripe) ──RLS──► lecture/écriture via clé service_role
+    │
+    ├──► Anthropic API ──► génération des insights + chat conversationnel + sélection des graphiques
+    │
+    └──► Stripe Checkout ──► paiement Pro
+              │
+              ▼
+         Stripe Webhook ──► Supabase Edge Function (stripe-webhook)
+                                  │
+                                  ▼
+                          Met à jour "profiles" (renouvellement, échec paiement, annulation)
 ```
+
+**Pourquoi une Edge Function ?** Streamlit ne peut pas recevoir de requêtes HTTP entrantes (webhooks) — ce n'est pas un serveur classique. La Edge Function Supabase sert de relais : Stripe l'appelle, elle met à jour Supabase, et l'app Streamlit se contente de lire Supabase au moment de la connexion de l'utilisateur.
 
 ---
 
-## 🎯 Ce Qui a Changé
+## 📦 Source unique de vérité : `plans_config.py`
 
-### Dans `app.py` (maintenant `app_commercial.py`)
+Toute la configuration des 3 plans (Trial, Pro, Enterprise) vit dans `utils/plans_config.py` : quotas, tailles de fichiers, formats d'export, nombre de visualisations. **Ne jamais redéfinir un plan ailleurs** — c'est exactement le problème qui existait avant (deux fichiers avec des chiffres différents et désynchronisés).
 
-**AJOUTÉ :**
-1. Import du module `subscription`
-2. Récupération du plan utilisateur depuis l'auth
-3. Vérification taille fichier à l'upload
-4. Vérification nombre de lignes après chargement
-5. Filtrage modes IA selon le plan
-6. Filtrage formats export selon le plan
-7. Limitation du nombre de visualisations
-8. Intégration vérification quota avant génération
-9. Messages d'upgrade contextuels partout
-
-**GARDÉ :**
-- Toute la logique d'authentification existante
-- Le système de quota (reports_used, reports_limit)
-- Le workflow complet de l'app
-- Tous les onglets (Quality, Overview, Viz, Insights, Report)
-
-### Dans `auth_trial.py` (maintenant `auth_trial_updated.py`)
-
-**AJOUTÉ :**
-1. Dictionnaire `PLAN_CONFIGS` centralisé avec tous les plans
-2. Support des plans : trial, starter, pro, enterprise
-3. Configuration des limites par plan :
-   - `reports_limit` : 3, 100, 500, illimité
-   - `max_file_size_mb` : 10, 50, 200, illimité
-   - `max_rows` : 5000, 50000, 500000, illimité
-   - `ai_modes` : liste selon plan
-   - `export_formats` : liste selon plan
-4. Messages d'upgrade détaillés avec tous les plans
-5. Badges colorés pour chaque plan
-
-**GARDÉ :**
-- Toute la logique de connexion/inscription
-- Le système de compteur de rapports
-- Les fonctions `can_generate_report()`, `increment_report_count()`
-- Le stockage en session_state
+Le Price ID Stripe (`price_...`) n'est volontairement PAS dans ce fichier — il vit dans `st.secrets["STRIPE_PRICE_ID_PRO"]` pour éviter de committer des identifiants dans Git.
 
 ---
 
-## 🎨 Nouveaux Plans Détaillés
+## 🔐 Authentification (Supabase Auth natif)
 
-### 🎁 Trial (Gratuit)
-```yaml
-Rapports: 3 (total)
-Fichier: 10 MB max
-Lignes: 5,000 max
-IA: Basique uniquement
-Export: HTML seulement
-Durée: Permanent (pas de limite de temps)
-```
-
-### 🚀 Starter ($29/mois)
-```yaml
-Rapports: 100/mois
-Fichier: 50 MB max
-Lignes: 50,000 max
-IA: Basique + Ollama
-Export: HTML + Word
-Visualisations: 6 max
-```
-
-### ⭐ Pro ($99/mois)
-```yaml
-Rapports: 500/mois
-Fichier: 200 MB max
-Lignes: 500,000 max
-IA: Tous modes (Basique + Ollama + Anthropic)
-Export: HTML + Word + PDF
-Visualisations: 12 max
-Features: Templates, Rapports planifiés, API
-```
-
-### 💎 Enterprise ($299/mois)
-```yaml
-Rapports: Illimité ♾️
-Fichier: Illimité ♾️
-Lignes: Illimité ♾️
-IA: Tous modes
-Export: Tous formats (HTML, Word, PDF, PowerPoint)
-Visualisations: Illimité ♾️
-Features: Tout + Support 24/7
-```
+- Les mots de passe sont gérés entièrement par Supabase (jamais de hash maison).
+- Un trigger SQL (`handle_new_user`, voir `database_schema.sql`) crée automatiquement une ligne `profiles` à chaque inscription.
+- **Reset de mot de passe** : utilise le flux `token_hash` (pas `access_token` en fragment d'URL, illisible côté serveur Streamlit). Le template email "Reset Password" dans Supabase doit contenir :
+  ```
+  {{ .SiteURL }}/?type=recovery&token_hash={{ .TokenHash }}
+  ```
+- **Piège connu** : la personnalisation des templates email et le volume d'envoi (2/heure par défaut) nécessitent un SMTP externe. On utilise **Brevo** (300 emails/jour gratuit, pas besoin de domaine vérifié — juste une adresse email individuelle validée).
 
 ---
 
-## 🔍 Points de Vérification des Limites
+## 💳 Paiements (Stripe)
 
-L'app vérifie maintenant les limites à **7 endroits différents** :
+### Checkout
+`utils/stripe_checkout.py` crée une session Stripe Checkout et gère le retour (`?checkout=success&session_id=...`) : à ce moment, l'app vérifie le paiement auprès de Stripe et met à jour Supabase immédiatement — c'est un flux **synchrone**, complémentaire au webhook (qui couvre les événements asynchrones : renouvellement, échec, annulation).
 
-### 1. **Quota de rapports** (Sidebar)
-- Affiche le compteur
-- Badge du plan actuel
-- Progress bar
+### Customer Portal
+Bouton "Gérer mon abonnement" pour les utilisateurs Pro — ouvre le portail Stripe (annulation, moyen de paiement, factures), zéro code de gestion à maintenir côté app.
 
-### 2. **Taille du fichier** (Upload)
-```python
-if file_size_mb > current_plan.max_file_size_mb:
-    st.error("⚠️ Fichier trop volumineux")
-    # Suggère upgrade
-    st.stop()
-```
+⚠️ En mode test, le Customer Portal doit être activé une fois dans Stripe Dashboard → Billing → Customer portal → "Activate test link".
 
-### 3. **Nombre de lignes** (Après chargement)
-```python
-if num_rows > current_plan.max_rows:
-    st.error("⚠️ Trop de lignes")
-    # Suggère upgrade
-    st.stop()
-```
+### Webhook (Edge Function `stripe-webhook`)
+Événements gérés : `invoice.paid` (reset quota mensuel), `invoice.payment_failed` (statut `past_due`), `customer.subscription.deleted` (retour au plan Trial), `customer.subscription.updated` (sync statut).
 
-### 4. **Modes IA** (Sidebar config)
-```python
-available_ai_modes = current_plan.ai_modes
-# Si Anthropic bloqué → Message upgrade
-```
-
-### 5. **Formats d'export** (Sidebar config)
-```python
-available_formats = current_plan.export_formats
-# Si PDF bloqué → Message upgrade
-```
-
-### 6. **Nombre de visualisations** (Tab 3)
-```python
-if len(viz) > current_plan.max_visualizations:
-    # Limite à max_viz
-    # Affiche warning + upgrade
-```
-
-### 7. **Génération rapport** (Tab 4)
-```python
-can_gen, msg = can_generate_report()
-if not can_gen:
-    show_upgrade_message()
-    st.stop()
-```
+⚠️ **Piège récurrent** : le toggle "Enforce JWT Verification" de l'Edge Function se **réactive automatiquement à chaque déploiement**. Si Stripe reçoit des 401, c'est toujours la première chose à vérifier (Edge Functions → stripe-webhook → Details → Security).
 
 ---
 
-## 🧪 Tests à Effectuer
+## 🎯 Gestion manuelle du plan Enterprise
 
-### Test 1 : Trial → Starter
-1. ✅ Se connecter en Trial
-2. ✅ Générer 3 rapports
-3. ✅ Voir message "Limite atteinte"
-4. ✅ Voir offre Starter dans le message
+Aucune automatisation pour l'instant (volume faible attendu au lancement) :
 
-### Test 2 : Starter → Pro
-1. ✅ Uploader fichier > 50 MB
-2. ✅ Voir blocage + message upgrade Pro
-3. ✅ Essayer mode Anthropic API
-4. ✅ Voir message "Disponible en Pro"
+1. Négociation par email (`agouanetf@yahoo.com`, via le lien "Contact us" replié dans l'app)
+2. Supabase → Table Editor → `profiles` → trouver le compte par email → `plan = enterprise`, `reports_limit = -1`, `subscription_status = active`
+3. (Optionnel) Créer un abonnement à prix personnalisé dans Stripe Dashboard (mode live), copier le `stripe_customer_id` généré vers Supabase pour que le client puisse utiliser le Customer Portal
 
-### Test 3 : Pro → Enterprise
-1. ✅ Générer 500 rapports (simuler)
-2. ✅ Voir message limite
-3. ✅ Voir offre Enterprise
-
-### Test 4 : Limites Visualisations
-1. ✅ En Starter : voir 6 viz max
-2. ✅ En Pro : voir 12 viz max
-3. ✅ En Enterprise : voir toutes les viz
-
-### Test 5 : Formats Export
-1. ✅ Trial : HTML seulement
-2. ✅ Starter : HTML + Word
-3. ✅ Pro : HTML + Word + PDF
-4. ✅ Enterprise : Tous formats
+Si le volume augmente, envisager une petite page admin dans l'app plutôt que cette procédure manuelle.
 
 ---
 
-## 💡 Messages d'Upgrade Contextuels
+## 🖨️ Export PDF
 
-L'app affiche maintenant des messages **contextuels et intelligents** :
-
-### Exemple 1 : Fichier trop gros
-```
-⚠️ Fichier trop volumineux : 75 MB (limite: 50 MB en plan Starter)
-
-💡 Le plan Pro supporte jusqu'à 200 MB
-
-📧 Contact : agouanetf@yahoo.com pour passer au plan PRO
-```
-
-### Exemple 2 : Trop de lignes
-```
-⚠️ Trop de lignes : 75,000 lignes (limite: 50,000 en plan Starter)
-
-💡 Le plan Pro supporte jusqu'à 500,000 lignes
-
-📧 Contact : agouanetf@yahoo.com pour passer au plan PRO
-```
-
-### Exemple 3 : Mode IA bloqué
-```
-🔒 Anthropic API disponible en plan PRO
-
-⭐ Débloquer Anthropic API avec PRO
-[Bouton]
-```
+Pas de module de génération PDF dédié — le PDF est obtenu en imprimant le rapport HTML (le CSS `@media print` de `html_export.py` gère déjà une mise en page imprimable propre). C'est pourquoi "PDF" n'apparaît pas comme format de téléchargement séparé dans l'app, seulement comme instruction ("téléchargez le HTML, Ctrl+P, Enregistrer en PDF").
 
 ---
 
-## 🎨 Interface Utilisateur
+## 🧠 Insights IA
 
-### Sidebar - Section Plan
-Affiche maintenant :
-- **Badge du plan** (coloré selon le plan)
-- **Résumé des fonctionnalités** (expandable)
-- **Compteur de rapports** avec progress bar
-- **Tableau comparatif** (dans expander)
-
-### Messages d'Erreur
-Plus clairs et avec actions :
-- Message d'erreur clair
-- Explication de la limite
-- Suggestion du plan suivant
-- Bouton ou contact email
+- Modèle utilisé : `claude-sonnet-4-5-20250929` (voir `ai_insights.py`, `report_chat.py`, `chart_curator.py`)
+- **Mode basique** (sans IA) sert de filet de sécurité si l'API Anthropic échoue — ne décompte **pas** le quota de rapports dans ce cas (transparence envers l'utilisateur)
+- **Chat conversationnel** : répond à partir des statistiques déjà calculées, jamais des lignes brutes du fichier. Limité à 30 messages par rapport (protection anti-abus, pas lié au quota payant)
+- **Graphiques "coup de cœur"** : sélection IA des 4 visualisations les plus pertinentes (appel texte léger, jamais d'image envoyée à l'API). Repli automatique sur un ordre de priorité par défaut si l'API échoue
 
 ---
 
-## 📊 Logique de Conversion
+## 🔒 Confidentialité — résumé technique
 
-```
-Trial (3 rapports)
-    ↓
-Limite atteinte → Affiche Starter + Pro + Enterprise
-    ↓
-User choisit Starter ($29)
-    ↓
-100 rapports/mois
-    ↓
-Limite atteinte → Affiche Pro
-    ↓
-User choisit Pro ($99)
-    ↓
-500 rapports/mois
-    ↓
-Limite atteinte → Affiche Enterprise
-    ↓
-User choisit Enterprise ($299)
-    ↓
-Illimité ♾️
-```
+- Fichiers uploadés : en mémoire (`st.session_state`) uniquement, jamais persistés
+- Anthropic reçoit des statistiques agrégées (noms de colonnes, moyennes, etc.), jamais les lignes brutes
+- Mots de passe : gérés par Supabase Auth, jamais vus par le code de l'app
+- Paiements : gérés par Stripe, l'app ne stocke qu'un `stripe_customer_id`
 
 ---
 
-## 🔧 Configuration Simplifiée
+## 🚧 Limites connues / dette technique
 
-Tous les plans sont définis dans **UN SEUL endroit** :
+- `analyzer.py` limite l'analyse catégorielle aux 10 premières colonnes du fichier (au-delà, non analysées) — acceptable pour l'instant, à revoir si des clients uploadent des fichiers très larges
+- Le plan affiché dans l'app ne se resynchronise qu'à la **connexion** — un changement de plan en cours de session (ex: annulation via Stripe pendant que l'utilisateur est connecté) ne se reflète qu'après reconnexion
+- Pas de page admin — toute intervention (Enterprise, correction manuelle) se fait directement dans Supabase
+- Export PowerPoint non implémenté (mentionné nulle part dans l'UI actuellement, correctement retiré de `export_formats`)
 
-### Dans `auth_trial.py` :
-```python
-PLAN_CONFIGS = {
-    "trial": {
-        "reports_limit": 3,
-        "max_file_size_mb": 10,
-        ...
-    },
-    "starter": {
-        "reports_limit": 100,
-        ...
-    },
-    ...
-}
-```
+## 📋 Roadmap restante
 
-### Dans `utils/subscription.py` :
-```python
-PLANS = {
-    'starter': SubscriptionPlan(
-        reports_per_month=100,
-        max_file_size_mb=50,
-        ...
-    ),
-    ...
-}
-```
-
-**Important** : Les deux doivent être synchronisés !
-
----
-
-## ⚠️ Notes Importantes
-
-### 1. Persistance des Données
-Actuellement, tout est en **session_state** (temporaire).
-
-**En production**, tu devras :
-- Remplacer par une vraie base de données (Supabase/Firebase)
-- Sauvegarder `reports_used` de façon persistante
-- Reset le compteur chaque mois pour les plans payants
-
-### 2. Gestion des Paiements
-Pour l'instant, pas de paiement automatique.
-
-**Pour activer Stripe** :
-- Intégrer Stripe Checkout
-- Gérer les webhooks
-- Mettre à jour le plan automatiquement
-- Gérer les abonnements
-
-### 3. Passage de Trial à Payant
-Actuellement, il faut **contacter par email**.
-
-**Pour automatiser** :
-- Ajouter bouton "S'abonner" dans l'app
-- Rediriger vers Stripe Checkout
-- Webhook pour activer le plan
-
----
-
-## 🚀 Prochaines Étapes Suggérées
-
-### Court Terme (1-2 semaines)
-1. ✅ Implémenter les nouveaux fichiers
-2. ✅ Tester tous les scénarios
-3. 📧 Créer landing page avec tarifs
-4. 💳 Intégrer Stripe pour paiements
-
-### Moyen Terme (1 mois)
-1. 🗄️ Migrer vers base de données réelle
-2. 🔄 Système de reset mensuel des quotas
-3. 📊 Dashboard admin pour gérer users
-4. 📧 Emails automatiques (bienvenue, limite atteinte, etc.)
-
-### Long Terme (3 mois)
-1. 🎯 Analytics avancés
-2. 🏢 Portail self-service pour entreprises
-3. 🔌 API publique pour Pro/Enterprise
-4. 📱 Application mobile
-
----
-
-## 📞 Support
-
-Si tu rencontres des problèmes :
-
-1. **Erreur d'import** → Vérifie que `subscription.py` est dans `utils/`
-2. **Plan non reconnu** → Vérifie `PLAN_CONFIGS` dans `auth_trial.py`
-3. **Limites non appliquées** → Vérifie que `current_plan` est bien récupéré
-4. **Messages en double** → Peut-être des `st.rerun()` en trop
-
----
-
-## ✅ Checklist Finale
-
-Avant de mettre en prod :
-
-- [ ] Tous les fichiers copiés
-- [ ] App démarre sans erreur
-- [ ] Connexion/Inscription fonctionne
-- [ ] Plans Trial → Starter → Pro → Enterprise testés
-- [ ] Limites fichier/lignes testées
-- [ ] Modes IA filtrés correctement
-- [ ] Formats export filtrés correctement
-- [ ] Visualisations limitées correctement
-- [ ] Messages d'upgrade affichés
-- [ ] Contact email correct partout
-
----
-
-**Tout est prêt ! 🎉**
-
-Tu as maintenant une app commerciale complète avec :
-- ✅ 4 plans (Trial, Starter, Pro, Enterprise)
-- ✅ Authentification + Auto-inscription
-- ✅ Limites appliquées à 7 endroits
-- ✅ Messages d'upgrade contextuels
-- ✅ Interface professionnelle
-- ✅ Prêt pour monétisation
-
-**Bon courage ! 🚀**
+- **Lien de rapport partageable publiquement** (différenciation produit, pas encore fait)
+- Page admin si le volume Enterprise augmente
+- Réactiver la confirmation email Supabase avant un vrai lancement public (désactivée pendant les tests)
+- Régénérer les clés Anthropic/Supabase/Stripe si elles ont été partagées en clair pendant le développement (rappel sécurité)

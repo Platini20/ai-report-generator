@@ -283,6 +283,13 @@ def show_home_screen(lang: str):
             - 📉 Business Intelligence
             """)
 
+    st.markdown("---")
+    st.caption(
+        "📧 Une question, un problème, ou besoin d'un plan Enterprise sur mesure ? Contactez-nous : agouanetf@yahoo.com"
+        if lang == "fr"
+        else "📧 Questions, issues, or need a custom Enterprise plan? Contact us: agouanetf@yahoo.com"
+    )
+
 
 # ==========================================
 # INITIALISATION
@@ -371,29 +378,7 @@ with st.sidebar:
     st.markdown("---")
     
     st.markdown(f"### {t('ai_section', st.session_state.ui_lang)}")
-    
-    # Message promotionnel Anthropic
-    if st.session_state.ui_lang == "fr":
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-            <p style="color: white; margin: 0; font-size: 0.9rem; text-align: center;">
-                <strong>💡 Recommandé</strong><br>
-                Utilisez <strong>Anthropic API</strong> pour des insights de haute qualité <br>
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-            <p style="color: white; margin: 0; font-size: 0.9rem; text-align: center;">
-                <strong>💡 </strong><br>
-                This app uses <strong>Anthropic API</strong> for high-quality insights <br> 
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
+
     # ==========================================
     # SERVICE IA - ANTHROPIC (PRÉ-CONFIGURÉ)
     # ==========================================
@@ -503,6 +488,8 @@ def show_file_limit_upgrade_message(plan_id: str):
             if lang == "fr"
             else "💡 Upgrade to the **Pro** plan ($19.99/mo) to upload files up to 200 MB / 300,000 rows."
         )
+        from utils.stripe_checkout import show_upgrade_button
+        show_upgrade_button()
     else:
         st.info(
             "💡 Passez au plan **Enterprise** (sur devis) pour des fichiers de taille illimitée."
@@ -1118,6 +1105,9 @@ if st.session_state.active_tab == "insights":
             if not can_generate_report_bool:
                 # Quota épuisé
                 show_upgrade_message()
+                if st.session_state.get("user_plan") == "trial":
+                    from utils.stripe_checkout import show_upgrade_button
+                    show_upgrade_button()
                 st.stop()
             
             if not api_key:

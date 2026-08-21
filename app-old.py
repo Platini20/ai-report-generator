@@ -388,8 +388,8 @@ with st.sidebar:
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                     padding: 12px; border-radius: 8px; margin-bottom: 15px;">
             <p style="color: white; margin: 0; font-size: 0.9rem; text-align: center;">
-                <strong>💡 Recommended</strong><br>
-                Use <strong>Anthropic API</strong> for high-quality insights <br> 
+                <strong>💡 </strong><br>
+                This app uses <strong>Anthropic API</strong> for high-quality insights <br> 
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -431,11 +431,25 @@ with st.sidebar:
     )
     
     st.markdown(f"### {t('export_format', st.session_state.ui_lang)}")
+    from utils.plans_config import get_plan as _get_plan_export
+    _allowed_formats = [
+        f for f in _get_plan_export(st.session_state.get("user_plan", "trial"))["export_formats"]
+        if f in ("HTML", "Word")  # PDF = impression du HTML, pas un format de génération séparé
+    ]
+    if not _allowed_formats:
+        _allowed_formats = ["HTML"]
+
     st.session_state.export_format = st.selectbox(
         t("export_format", st.session_state.ui_lang),
-        options=["HTML", "Word"],
+        options=_allowed_formats,
         help="HTML: Imprimable en PDF | Word: Éditable .docx",
     )
+    if len(_allowed_formats) == 1 and st.session_state.get("user_plan", "trial") == "trial":
+        st.caption(
+            "🔒 Export Word disponible avec le plan Pro."
+            if st.session_state.ui_lang == "fr"
+            else "🔒 Word export available with the Pro plan."
+        )
     # ==========================================
     # 🚪 BOUTON DÉCONNEXION
     # ==========================================
@@ -471,6 +485,48 @@ if uploaded_file is None:
 
 reset_analysis_on_new_file(uploaded_file.name)
 
+# ==========================================
+# 🔒 LIMITES DE PLAN — taille de fichier
+# (pas de vérification pour le dataset d'exemple, toujours dans les clous)
+# ==========================================
+from utils.plans_config import get_plan
+_current_plan = get_plan(st.session_state.get("user_plan", "trial"))
+_is_example = st.session_state.get("_use_example_file", False)
+
+def show_file_limit_upgrade_message(plan_id: str):
+    """Message d'upgrade contextuel pour une limite de FICHIER dépassée
+    (taille ou lignes) — distinct du quota de rapports (show_upgrade_message)."""
+    lang = st.session_state.ui_lang
+    if plan_id == "trial":
+        st.info(
+            "💡 Passez au plan **Pro** (19,99$/mois) pour uploader des fichiers jusqu'à 200 MB / 300 000 lignes."
+            if lang == "fr"
+            else "💡 Upgrade to the **Pro** plan ($19.99/mo) to upload files up to 200 MB / 300,000 rows."
+        )
+    else:
+        st.info(
+            "💡 Passez au plan **Enterprise** (sur devis) pour des fichiers de taille illimitée."
+            if lang == "fr"
+            else "💡 Upgrade to the **Enterprise** plan (custom pricing) for unlimited file sizes."
+        )
+        st.caption(
+            "📧 Contact : agouanetf@yahoo.com" if lang == "fr" else "📧 Contact: agouanetf@yahoo.com"
+        )
+
+
+if not _is_example and st.session_state.df is None:
+    _max_mb = _current_plan.get("max_file_size_mb", -1)
+    if _max_mb != -1:
+        _file_size_mb = getattr(uploaded_file, "size", 0) / (1024 * 1024)
+        if _file_size_mb > _max_mb:
+            st.error(
+                f"🚫 Fichier trop volumineux ({_file_size_mb:.1f} MB) pour votre plan {_current_plan['name']} (limite: {_max_mb} MB)."
+                if st.session_state.ui_lang == "fr"
+                else f"🚫 File too large ({_file_size_mb:.1f} MB) for your {_current_plan['name']} plan (limit: {_max_mb} MB)."
+            )
+            show_file_limit_upgrade_message(st.session_state.get("user_plan", "trial"))
+            st.stop()
+
 # Charger et nettoyer les données (une seule fois)
 if st.session_state.df is None:
     with st.spinner(
@@ -482,7 +538,23 @@ if st.session_state.df is None:
             df_raw = load_any_file(uploaded_file)
             if df_raw is None:
                 st.stop()
-            
+
+            # ==========================================
+            # 🔒 LIMITES DE PLAN — nombre de lignes
+            # (vérifié après chargement, on ne connaît le nombre de lignes qu'ici)
+            # ==========================================
+            if not _is_example:
+                _max_rows = _current_plan.get("max_rows", -1)
+                if _max_rows != -1 and len(df_raw) > _max_rows:
+                    st.error(
+                        f"🚫 Fichier trop volumineux ({len(df_raw):,} lignes) pour votre plan {_current_plan['name']} (limite: {_max_rows:,} lignes)."
+                        if st.session_state.ui_lang == "fr"
+                        else f"🚫 File has too many rows ({len(df_raw):,}) for your {_current_plan['name']} plan (limit: {_max_rows:,} rows)."
+                    )
+                    show_file_limit_upgrade_message(st.session_state.get("user_plan", "trial"))
+                    st.session_state._last_uploaded_name = None  # permet de réessayer avec un autre fichier
+                    st.stop()
+
             st.session_state.df_original = df_raw.copy()
             
             # Nettoyer avec la langue UI
@@ -944,9 +1016,14 @@ if st.session_state.active_tab == "viz":
 
         # ==========================================
         # 📊 TOUS LES GRAPHIQUES (exhaustif, replié)
+        # Réservé aux plans sans limite de visualisations (Trial = 4,
+        # déjà entièrement couvert par les "coup de cœur" ci-dessus).
         # ==========================================
+        from utils.plans_config import get_plan as _get_plan_viz
+        _viz_limit = _get_plan_viz(st.session_state.get("user_plan", "trial"))["max_visualizations"]
         remaining = {k: v for k, v in visualizations.items() if k not in featured_keys}
-        if remaining:
+
+        if _viz_limit == -1 and remaining:
             with st.expander(
                 f"📊 Voir tous les graphiques ({len(remaining)} de plus)"
                 if st.session_state.ui_lang == "fr"
@@ -963,6 +1040,12 @@ if st.session_state.active_tab == "viz":
                             unsafe_allow_html=True
                         )
                     st.markdown("---")
+        elif _viz_limit != -1 and remaining:
+            st.info(
+                f"🔒 {len(remaining)} graphique(s) supplémentaire(s) disponible(s) avec le plan Pro."
+                if st.session_state.ui_lang == "fr"
+                else f"🔒 {len(remaining)} more chart(s) available with the Pro plan."
+            )
 
 
 # ==========================================
@@ -1314,7 +1397,16 @@ if st.session_state.active_tab == "report":
                 if st.session_state.ui_lang == "fr" 
                 else "⬇️ Download Report"
             )
-            
+
+            from utils.plans_config import get_plan as _get_plan_pdf
+            if "PDF" in _get_plan_pdf(st.session_state.get("user_plan", "trial"))["export_formats"]:
+                st.caption(
+                    "💡 Pour obtenir un PDF : téléchargez le fichier HTML ci-dessous, ouvrez-le dans votre navigateur, puis Ctrl+P (ou Cmd+P sur Mac) → \"Enregistrer en PDF\"."
+                    if st.session_state.ui_lang == "fr"
+                    else "💡 To get a PDF: download the HTML file below, open it in your browser, then Ctrl+P (or Cmd+P on Mac) → \"Save as PDF\"."
+                )
+
+            _word_allowed = "Word" in _get_plan_pdf(st.session_state.get("user_plan", "trial"))["export_formats"]
             col_a, col_b = st.columns(2)
             
             with col_a:
@@ -1328,7 +1420,14 @@ if st.session_state.active_tab == "report":
                 )
             
             with col_b:
-                if st.button(
+                if not _word_allowed:
+                    st.button(
+                        "🔒 Word (Plan Pro)" if st.session_state.ui_lang == "fr" else "🔒 Word (Pro plan)",
+                        use_container_width=True,
+                        disabled=True,
+                        help="Passez au plan Pro pour débloquer l'export Word." if st.session_state.ui_lang == "fr" else "Upgrade to Pro to unlock Word export."
+                    )
+                elif st.button(
                     "📝 Word (.docx)",
                     use_container_width=True,
                     help="Rapport éditable au format Word"

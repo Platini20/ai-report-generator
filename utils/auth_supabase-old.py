@@ -494,6 +494,29 @@ def check_login() -> bool:
                 💎 {t['enterprise_plan']}
             </div>
         """, unsafe_allow_html=True)
+
+        with st.expander(
+            "✨ " + ("Voir les avantages du plan Pro" if ui_lang == "fr" else "See Pro plan benefits")
+        ):
+            pro = PLAN_CONFIGS["pro"]
+            if ui_lang == "fr":
+                st.markdown(f"""
+                - **{pro['reports_limit']} rapports par mois**
+                - Fichiers jusqu'à **{pro['max_file_size_mb']} MB** / **{pro['max_rows']:,} lignes**
+                - Export : **{', '.join(pro['export_formats'])}**
+                - Visualisations illimitées
+                """)
+            else:
+                st.markdown(f"""
+                - **{pro['reports_limit']} reports per month**
+                - Files up to **{pro['max_file_size_mb']} MB** / **{pro['max_rows']:,} rows**
+                - Export: **{', '.join(pro['export_formats'])}**
+                - Unlimited visualizations
+                """)
+
+        with st.expander("📧 Contact us"):
+            st.markdown(CONTACT_EMAIL)
+
         st.markdown('</div>', unsafe_allow_html=True)
 
     return False

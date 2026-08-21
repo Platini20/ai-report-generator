@@ -160,22 +160,3 @@ def show_upgrade_button():
             )
         except Exception as e:
             st.error(f"Erreur Stripe : {e}")
-
-    with st.expander(
-        "✨ " + ("Voir les avantages du plan Pro" if ui_lang == "fr" else "See Pro plan benefits")
-    ):
-        pro = PLAN_CONFIGS["pro"]
-        if ui_lang == "fr":
-            st.markdown(f"""
-            - **{pro['reports_limit']} rapports par mois**
-            - Fichiers jusqu'à **{pro['max_file_size_mb']} MB** / **{pro['max_rows']:,} lignes**
-            - Export : **{', '.join(pro['export_formats'])}**
-            - Visualisations illimitées
-            """)
-        else:
-            st.markdown(f"""
-            - **{pro['reports_limit']} reports per month**
-            - Files up to **{pro['max_file_size_mb']} MB** / **{pro['max_rows']:,} rows**
-            - Export: **{', '.join(pro['export_formats'])}**
-            - Unlimited visualizations
-            """)

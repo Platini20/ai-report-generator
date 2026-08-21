@@ -163,6 +163,7 @@ def init_session_state():
         'ai_insights': None,
         'visualizations': None,
         '_last_uploaded_name': None,
+        'active_tab': 'quality',
         'chat_history': [],
         'featured_charts': None,
         '_featured_for': None,
@@ -215,6 +216,7 @@ def reset_analysis_on_new_file(current_name: str):
         st.session_state.chat_history = []
         st.session_state.featured_charts = None
         st.session_state._featured_for = None
+        st.session_state.active_tab = "quality"
         st.session_state._last_uploaded_name = current_name
 
 
@@ -225,9 +227,9 @@ def show_home_screen(lang: str):
     with col2:
         st.info(
             "👈 " + (
-                "Upload a file in the sidebar to start" 
+                "Upload a file in the sidebar to start (or try the sample dataset also available there)" 
                 if lang == 'en' 
-                else "Téléchargez un fichier dans la barre latérale pour commencer"
+                else "Téléchargez un fichier dans la barre latérale pour commencer (ou essayez le jeu de données d'exemple, disponible au même endroit)"
             )
         )
     
@@ -544,21 +546,43 @@ if df is None or analysis is None:
 
 
 # ==========================================
-# TABS - INTERFACE PRINCIPALE
+# NAVIGATION - INTERFACE PRINCIPALE
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🧹 " + ("Qualité" if st.session_state.ui_lang == "fr" else "Quality"),
-    "👀 " + ("Vue d'ensemble" if st.session_state.ui_lang == "fr" else "Overview"),
-    "📊 " + ("Visualisations" if st.session_state.ui_lang == "fr" else "Visualizations"),
-    "🧠 " + ("Insights" if st.session_state.ui_lang == "fr" else "Insights"),
-    "📄 " + ("Rapport" if st.session_state.ui_lang == "fr" else "Report"),
-])
+# ⚠️ On n'utilise PAS st.tabs() : Streamlit ne garantit pas de conserver
+# l'onglet actif face à un rerun (même déclenché par un simple clic de
+# bouton), ce qui ramenait l'utilisateur au premier onglet après avoir
+# généré un rapport. Cette navigation "faite maison" stocke l'onglet
+# actif dans session_state, qui lui persiste toujours correctement.
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "quality"
+
+_TAB_LABELS = {
+    "quality": "🧹 " + ("Qualité" if st.session_state.ui_lang == "fr" else "Quality"),
+    "overview": "👀 " + ("Vue d'ensemble" if st.session_state.ui_lang == "fr" else "Overview"),
+    "viz": "📊 " + ("Visualisations" if st.session_state.ui_lang == "fr" else "Visualizations"),
+    "insights": "🧠 " + ("Insights" if st.session_state.ui_lang == "fr" else "Insights"),
+    "report": "📄 " + ("Rapport" if st.session_state.ui_lang == "fr" else "Report"),
+}
+
+_nav_cols = st.columns(len(_TAB_LABELS))
+for _col, (_key, _label) in zip(_nav_cols, _TAB_LABELS.items()):
+    with _col:
+        if st.button(
+            _label,
+            key=f"nav_btn_{_key}",
+            type="primary" if st.session_state.active_tab == _key else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.active_tab = _key
+            st.rerun()
+
+st.markdown("---")
 
 
 # ==========================================
 # TAB 1: QUALITÉ DES DONNÉES (TRADUIT)
 # ==========================================
-with tab1:
+if st.session_state.active_tab == "quality":
     lang = st.session_state.ui_lang
     
     st.header(
@@ -738,7 +762,7 @@ with tab1:
 # ==========================================
 # TAB 2: VUE D'ENSEMBLE
 # ==========================================
-with tab2:
+if st.session_state.active_tab == "overview":
     st.header(
         "Vue d'Ensemble" 
         if st.session_state.ui_lang == "fr" 
@@ -839,7 +863,7 @@ with tab2:
 # ==========================================
 # TAB 3: VISUALISATIONS
 # ==========================================
-with tab3:
+if st.session_state.active_tab == "viz":
     st.header(
         "Visualisations" 
         if st.session_state.ui_lang == "fr" 
@@ -944,7 +968,7 @@ with tab3:
 # ==========================================
 # TAB 4: INSIGHTS IA
 # ==========================================
-with tab4:
+if st.session_state.active_tab == "insights":
     st.header(
         "Insights IA" 
         if st.session_state.ui_lang == "fr" 
@@ -992,6 +1016,7 @@ with tab4:
         can_generate = api_key is not None
         
         if st.button("🚀 Générer les Insights IA" if st.session_state.ui_lang == "fr" else "🚀 Generate AI Insights"):
+            st.session_state.active_tab = "insights"  # par sécurité, garantit qu'on reste ici
             is_example = st.session_state.get("_use_example_file", False)
 
             # ==========================================
@@ -1061,8 +1086,10 @@ with tab4:
                         )
                     elif quota["is_trial"]:
                         st.info(f"🎁 Essai gratuit : {quota['remaining']} rapport(s) restant(s)")
-                    
-                    st.rerun()
+                    # Pas de st.rerun() ici volontairement : st.rerun() réinitialise
+                    # l'onglet actif au premier (limitation de st.tabs()). Le script
+                    # continue naturellement et affiche les insights plus bas, sur
+                    # le même onglet Insights.
                 
                 except Exception as e:
                     st.error(f"❌ Claude API: {str(e)}")
@@ -1106,8 +1133,8 @@ with tab4:
                             lang=st.session_state.report_lang
                         )
                         st.session_state.chat_history = []
-                        # Pas d'increment_report_count() ici, volontairement
-                        st.rerun()
+                        # Pas d'increment_report_count() ni de st.rerun() ici,
+                        # volontairement (voir note plus haut sur st.tabs()).
                     except Exception as fallback_error:
                         st.error(f"❌ {fallback_error}")
     
@@ -1195,7 +1222,8 @@ with tab4:
                 key="clear_chat_btn",
             ):
                 st.session_state.chat_history = []
-                st.rerun()
+                # Pas de st.rerun() : la boucle d'affichage juste en dessous
+                # reflète déjà la liste vide dans cette même exécution.
 
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
@@ -1234,7 +1262,7 @@ with tab4:
 # ==========================================
 # TAB 5: RAPPORT FINAL
 # ==========================================
-with tab5:
+if st.session_state.active_tab == "report":
     st.header(
         "Rapport Final" 
         if st.session_state.ui_lang == "fr" 

@@ -163,6 +163,7 @@ def init_session_state():
         'ai_insights': None,
         'visualizations': None,
         '_last_uploaded_name': None,
+        'active_tab': 'quality',
         'chat_history': [],
         'featured_charts': None,
         '_featured_for': None,
@@ -215,6 +216,7 @@ def reset_analysis_on_new_file(current_name: str):
         st.session_state.chat_history = []
         st.session_state.featured_charts = None
         st.session_state._featured_for = None
+        st.session_state.active_tab = "quality"
         st.session_state._last_uploaded_name = current_name
 
 
@@ -225,33 +227,10 @@ def show_home_screen(lang: str):
     with col2:
         st.info(
             "👈 " + (
-                "Upload a file in the sidebar to start" 
+                "Upload a file in the sidebar to start (or try the sample dataset also available there)" 
                 if lang == 'en' 
-                else "Téléchargez un fichier dans la barre latérale pour commencer"
+                else "Téléchargez un fichier dans la barre latérale pour commencer (ou essayez le jeu de données d'exemple, disponible au même endroit)"
             )
-        )
-
-        st.markdown(
-            "<div style='text-align:center; margin: 0.5rem 0; color:#6b7280;'>"
-            + ("— ou —" if lang == "fr" else "— or —")
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-
-        if st.button(
-            "🎯 " + ("Essayer avec un fichier d'exemple (gratuit, sans upload)" if lang == "fr"
-                     else "Try with a sample file (free, no upload needed)"),
-            type="primary",
-            use_container_width=True,
-            key="home_example_btn",
-        ):
-            st.session_state["_use_example_file"] = True
-            st.rerun()
-
-        st.caption(
-            "Pas de fichier sous la main ? Testez l'app en 2 clics avec un jeu de données de ventes fictif."
-            if lang == "fr"
-            else "Don't have a file handy? Try the app in 2 clicks with a sample sales dataset."
         )
     
     st.markdown("---")
@@ -452,11 +431,25 @@ with st.sidebar:
     )
     
     st.markdown(f"### {t('export_format', st.session_state.ui_lang)}")
+    from utils.plans_config import get_plan as _get_plan_export
+    _allowed_formats = [
+        f for f in _get_plan_export(st.session_state.get("user_plan", "trial"))["export_formats"]
+        if f in ("HTML", "Word")  # PDF = impression du HTML, pas un format de génération séparé
+    ]
+    if not _allowed_formats:
+        _allowed_formats = ["HTML"]
+
     st.session_state.export_format = st.selectbox(
         t("export_format", st.session_state.ui_lang),
-        options=["HTML", "Word"],
+        options=_allowed_formats,
         help="HTML: Imprimable en PDF | Word: Éditable .docx",
     )
+    if len(_allowed_formats) == 1 and st.session_state.get("user_plan", "trial") == "trial":
+        st.caption(
+            "🔒 Export Word disponible avec le plan Pro."
+            if st.session_state.ui_lang == "fr"
+            else "🔒 Word export available with the Pro plan."
+        )
     # ==========================================
     # 🚪 BOUTON DÉCONNEXION
     # ==========================================
@@ -492,6 +485,27 @@ if uploaded_file is None:
 
 reset_analysis_on_new_file(uploaded_file.name)
 
+# ==========================================
+# 🔒 LIMITES DE PLAN — taille de fichier
+# (pas de vérification pour le dataset d'exemple, toujours dans les clous)
+# ==========================================
+from utils.plans_config import get_plan
+_current_plan = get_plan(st.session_state.get("user_plan", "trial"))
+_is_example = st.session_state.get("_use_example_file", False)
+
+if not _is_example and st.session_state.df is None:
+    _max_mb = _current_plan.get("max_file_size_mb", -1)
+    if _max_mb != -1:
+        _file_size_mb = getattr(uploaded_file, "size", 0) / (1024 * 1024)
+        if _file_size_mb > _max_mb:
+            st.error(
+                f"🚫 Fichier trop volumineux ({_file_size_mb:.1f} MB) pour votre plan {_current_plan['name']} (limite: {_max_mb} MB)."
+                if st.session_state.ui_lang == "fr"
+                else f"🚫 File too large ({_file_size_mb:.1f} MB) for your {_current_plan['name']} plan (limit: {_max_mb} MB)."
+            )
+            show_upgrade_message()
+            st.stop()
+
 # Charger et nettoyer les données (une seule fois)
 if st.session_state.df is None:
     with st.spinner(
@@ -503,7 +517,23 @@ if st.session_state.df is None:
             df_raw = load_any_file(uploaded_file)
             if df_raw is None:
                 st.stop()
-            
+
+            # ==========================================
+            # 🔒 LIMITES DE PLAN — nombre de lignes
+            # (vérifié après chargement, on ne connaît le nombre de lignes qu'ici)
+            # ==========================================
+            if not _is_example:
+                _max_rows = _current_plan.get("max_rows", -1)
+                if _max_rows != -1 and len(df_raw) > _max_rows:
+                    st.error(
+                        f"🚫 Fichier trop volumineux ({len(df_raw):,} lignes) pour votre plan {_current_plan['name']} (limite: {_max_rows:,} lignes)."
+                        if st.session_state.ui_lang == "fr"
+                        else f"🚫 File has too many rows ({len(df_raw):,}) for your {_current_plan['name']} plan (limit: {_max_rows:,} rows)."
+                    )
+                    show_upgrade_message()
+                    st.session_state._last_uploaded_name = None  # permet de réessayer avec un autre fichier
+                    st.stop()
+
             st.session_state.df_original = df_raw.copy()
             
             # Nettoyer avec la langue UI
@@ -567,21 +597,43 @@ if df is None or analysis is None:
 
 
 # ==========================================
-# TABS - INTERFACE PRINCIPALE
+# NAVIGATION - INTERFACE PRINCIPALE
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🧹 " + ("Qualité" if st.session_state.ui_lang == "fr" else "Quality"),
-    "👀 " + ("Vue d'ensemble" if st.session_state.ui_lang == "fr" else "Overview"),
-    "📊 " + ("Visualisations" if st.session_state.ui_lang == "fr" else "Visualizations"),
-    "🧠 " + ("Insights" if st.session_state.ui_lang == "fr" else "Insights"),
-    "📄 " + ("Rapport" if st.session_state.ui_lang == "fr" else "Report"),
-])
+# ⚠️ On n'utilise PAS st.tabs() : Streamlit ne garantit pas de conserver
+# l'onglet actif face à un rerun (même déclenché par un simple clic de
+# bouton), ce qui ramenait l'utilisateur au premier onglet après avoir
+# généré un rapport. Cette navigation "faite maison" stocke l'onglet
+# actif dans session_state, qui lui persiste toujours correctement.
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "quality"
+
+_TAB_LABELS = {
+    "quality": "🧹 " + ("Qualité" if st.session_state.ui_lang == "fr" else "Quality"),
+    "overview": "👀 " + ("Vue d'ensemble" if st.session_state.ui_lang == "fr" else "Overview"),
+    "viz": "📊 " + ("Visualisations" if st.session_state.ui_lang == "fr" else "Visualizations"),
+    "insights": "🧠 " + ("Insights" if st.session_state.ui_lang == "fr" else "Insights"),
+    "report": "📄 " + ("Rapport" if st.session_state.ui_lang == "fr" else "Report"),
+}
+
+_nav_cols = st.columns(len(_TAB_LABELS))
+for _col, (_key, _label) in zip(_nav_cols, _TAB_LABELS.items()):
+    with _col:
+        if st.button(
+            _label,
+            key=f"nav_btn_{_key}",
+            type="primary" if st.session_state.active_tab == _key else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.active_tab = _key
+            st.rerun()
+
+st.markdown("---")
 
 
 # ==========================================
 # TAB 1: QUALITÉ DES DONNÉES (TRADUIT)
 # ==========================================
-with tab1:
+if st.session_state.active_tab == "quality":
     lang = st.session_state.ui_lang
     
     st.header(
@@ -761,7 +813,7 @@ with tab1:
 # ==========================================
 # TAB 2: VUE D'ENSEMBLE
 # ==========================================
-with tab2:
+if st.session_state.active_tab == "overview":
     st.header(
         "Vue d'Ensemble" 
         if st.session_state.ui_lang == "fr" 
@@ -862,7 +914,7 @@ with tab2:
 # ==========================================
 # TAB 3: VISUALISATIONS
 # ==========================================
-with tab3:
+if st.session_state.active_tab == "viz":
     st.header(
         "Visualisations" 
         if st.session_state.ui_lang == "fr" 
@@ -943,9 +995,14 @@ with tab3:
 
         # ==========================================
         # 📊 TOUS LES GRAPHIQUES (exhaustif, replié)
+        # Réservé aux plans sans limite de visualisations (Trial = 4,
+        # déjà entièrement couvert par les "coup de cœur" ci-dessus).
         # ==========================================
+        from utils.plans_config import get_plan as _get_plan_viz
+        _viz_limit = _get_plan_viz(st.session_state.get("user_plan", "trial"))["max_visualizations"]
         remaining = {k: v for k, v in visualizations.items() if k not in featured_keys}
-        if remaining:
+
+        if _viz_limit == -1 and remaining:
             with st.expander(
                 f"📊 Voir tous les graphiques ({len(remaining)} de plus)"
                 if st.session_state.ui_lang == "fr"
@@ -962,12 +1019,18 @@ with tab3:
                             unsafe_allow_html=True
                         )
                     st.markdown("---")
+        elif _viz_limit != -1 and remaining:
+            st.info(
+                f"🔒 {len(remaining)} graphique(s) supplémentaire(s) disponible(s) avec le plan Pro."
+                if st.session_state.ui_lang == "fr"
+                else f"🔒 {len(remaining)} more chart(s) available with the Pro plan."
+            )
 
 
 # ==========================================
 # TAB 4: INSIGHTS IA
 # ==========================================
-with tab4:
+if st.session_state.active_tab == "insights":
     st.header(
         "Insights IA" 
         if st.session_state.ui_lang == "fr" 
@@ -1015,6 +1078,7 @@ with tab4:
         can_generate = api_key is not None
         
         if st.button("🚀 Générer les Insights IA" if st.session_state.ui_lang == "fr" else "🚀 Generate AI Insights"):
+            st.session_state.active_tab = "insights"  # par sécurité, garantit qu'on reste ici
             is_example = st.session_state.get("_use_example_file", False)
 
             # ==========================================
@@ -1260,7 +1324,7 @@ with tab4:
 # ==========================================
 # TAB 5: RAPPORT FINAL
 # ==========================================
-with tab5:
+if st.session_state.active_tab == "report":
     st.header(
         "Rapport Final" 
         if st.session_state.ui_lang == "fr" 
@@ -1312,7 +1376,16 @@ with tab5:
                 if st.session_state.ui_lang == "fr" 
                 else "⬇️ Download Report"
             )
-            
+
+            from utils.plans_config import get_plan as _get_plan_pdf
+            if "PDF" in _get_plan_pdf(st.session_state.get("user_plan", "trial"))["export_formats"]:
+                st.caption(
+                    "💡 Pour obtenir un PDF : téléchargez le fichier HTML ci-dessous, ouvrez-le dans votre navigateur, puis Ctrl+P (ou Cmd+P sur Mac) → \"Enregistrer en PDF\"."
+                    if st.session_state.ui_lang == "fr"
+                    else "💡 To get a PDF: download the HTML file below, open it in your browser, then Ctrl+P (or Cmd+P on Mac) → \"Save as PDF\"."
+                )
+
+            _word_allowed = "Word" in _get_plan_pdf(st.session_state.get("user_plan", "trial"))["export_formats"]
             col_a, col_b = st.columns(2)
             
             with col_a:
@@ -1326,7 +1399,14 @@ with tab5:
                 )
             
             with col_b:
-                if st.button(
+                if not _word_allowed:
+                    st.button(
+                        "🔒 Word (Plan Pro)" if st.session_state.ui_lang == "fr" else "🔒 Word (Pro plan)",
+                        use_container_width=True,
+                        disabled=True,
+                        help="Passez au plan Pro pour débloquer l'export Word." if st.session_state.ui_lang == "fr" else "Upgrade to Pro to unlock Word export."
+                    )
+                elif st.button(
                     "📝 Word (.docx)",
                     use_container_width=True,
                     help="Rapport éditable au format Word"

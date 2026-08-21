@@ -31,9 +31,6 @@ PLAN_CONFIGS = {
         "price": 19.99,
         "stripe_price_id": None,         # ℹ️ Le vrai Price ID vit dans st.secrets["STRIPE_PRICE_ID_PRO"]
                                           # (pas ici, pour éviter de committer des IDs dans Git)
-        # ℹ️ "PDF" = impression du rapport HTML (Ctrl+P → Enregistrer en PDF),
-        # pas un module de génération PDF séparé. Le CSS @media print de
-        # html_export.py gère déjà la mise en page imprimable.
         "icon": "🚀",
     },
     "enterprise": {
@@ -42,9 +39,9 @@ PLAN_CONFIGS = {
         "max_file_size_mb": -1,
         "max_rows": -1,
         "ai_modes": ["Anthropic API"],
-        # PowerPoint listé mais pas encore codé — ne pas l'afficher comme
-        # disponible tant que word_export.py n'a pas d'équivalent .pptx.
-        # PDF = impression du HTML (voir commentaire plan Pro ci-dessus).
+        # PowerPoint listé mais pas encore codé (prévu après le module PDF) —
+        # ne pas l'afficher comme disponible tant que word_export.py n'a pas
+        # d'équivalent .pptx.
         "export_formats": ["HTML", "Word", "PDF"],
         "max_visualizations": -1,
         "price": None,                   # sur devis

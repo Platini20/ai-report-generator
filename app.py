@@ -284,11 +284,8 @@ def show_home_screen(lang: str):
             """)
 
     st.markdown("---")
-    st.caption(
-        "📧 Une question, un problème, ou besoin d'un plan Enterprise sur mesure ? Contactez-nous : agouanetf@yahoo.com"
-        if lang == "fr"
-        else "📧 Questions, issues, or need a custom Enterprise plan? Contact us: agouanetf@yahoo.com"
-    )
+    with st.expander("📧 Contact us"):
+        st.markdown("agouanetf@yahoo.com")
 
 
 # ==========================================

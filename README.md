@@ -92,7 +92,7 @@ ai-report-generator/
 ### Étapes
 
 ```bash
-git clone <url-du-repo>
+git clone (https://github.com/Platini20/ai-report-generator.git)
 cd ai-report-generator
 
 python -m venv venv

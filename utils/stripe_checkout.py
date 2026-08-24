@@ -2,11 +2,6 @@
 Intégration Stripe Checkout (Phase 2)
 Gère la création de session de paiement et la mise à jour du profil
 Supabase quand l'utilisateur revient sur l'app après un paiement réussi.
-
-⚠️ Ceci couvre le flux "achat immédiat". Les événements asynchrones
-(échec de paiement, annulation en cours de mois, renouvellement) ne
-sont PAS couverts ici — ils nécessitent le webhook Stripe (Phase 3),
-car ils peuvent survenir alors que l'utilisateur n'est pas dans l'app.
 """
 
 import streamlit as st

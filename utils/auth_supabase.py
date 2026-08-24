@@ -1,12 +1,5 @@
 """
 Authentification via Supabase Auth (natif)
-Remplace auth_trial.py.
-
-Les noms de fonctions publiques sont IDENTIQUES à l'ancien module
-(check_login, can_generate_report, increment_report_count,
-show_quota_sidebar, show_upgrade_message, logout) pour que app.py
-n'ait qu'UNE seule ligne à changer : l'import.
-
 Les plans sont importés depuis plans_config.py (source unique).
 """
 
@@ -74,11 +67,6 @@ def request_password_reset(email: str) -> Tuple[bool, str]:
 def handle_password_recovery() -> bool:
     """
     À appeler tout en haut de app.py, AVANT check_login().
-    Si l'URL contient ?type=recovery&token_hash=..., vérifie le lien
-    UNE SEULE FOIS (les liens sont à usage unique), stocke la session
-    obtenue, puis affiche le formulaire de nouveau mot de passe.
-    Les réessais (ex: mot de passe identique refusé) réutilisent cette
-    session déjà établie au lieu de re-vérifier le lien.
     Retourne True si le script principal doit s'arrêter (st.stop()).
     """
     ui_lang = st.session_state.get("ui_lang", "en")

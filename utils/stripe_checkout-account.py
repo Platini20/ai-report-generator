@@ -2,11 +2,6 @@
 Intégration Stripe Checkout (Phase 2)
 Gère la création de session de paiement et la mise à jour du profil
 Supabase quand l'utilisateur revient sur l'app après un paiement réussi.
-
-⚠️ Ceci couvre le flux "achat immédiat". Les événements asynchrones
-(échec de paiement, annulation en cours de mois, renouvellement) ne
-sont PAS couverts ici — ils nécessitent le webhook Stripe (Phase 3),
-car ils peuvent survenir alors que l'utilisateur n'est pas dans l'app.
 """
 
 import streamlit as st
@@ -148,14 +143,6 @@ def show_upgrade_button():
     label = "🚀 Passer Pro — 19,99$/mois" if ui_lang == "fr" else "🚀 Upgrade to Pro — $19.99/mo"
 
     if st.button(label, type="primary", use_container_width=True):
-        if st.session_state.get("is_anonymous"):
-            # Pas de compte : on force la création de compte d'abord,
-            # en conservant le solde de rapports déjà utilisé (reporté
-            # sur le nouveau compte une fois créé — voir app.py).
-            st.session_state["pending_signup_for_upgrade"] = True
-            st.session_state["_anon_carryover_used"] = st.session_state.get("reports_used", 0)
-            st.rerun()
-
         try:
             checkout_url = create_checkout_session(
                 user_id=st.session_state["user_id"],

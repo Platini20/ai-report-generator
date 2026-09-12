@@ -1,10 +1,6 @@
 """
 Source UNIQUE de vérité pour les plans tarifaires.
 Utilisé par auth_supabase.py, app.py, et le futur module Stripe (Phase 2).
-
-⚠️ Remplace les définitions dupliquées et désynchronisées qui existaient
-dans auth_trial.py (PLAN_CONFIGS) et subscription.py (PLANS).
-Ne redéfinissez plus les plans ailleurs — importez depuis ce fichier.
 """
 
 PLAN_CONFIGS = {
@@ -29,9 +25,7 @@ PLAN_CONFIGS = {
         "export_formats": ["HTML", "Word", "PDF"],
         "max_visualizations": -1,        # illimité
         "price": 19.99,
-        "stripe_price_id": None,         # ℹ️ Le vrai Price ID vit dans st.secrets["STRIPE_PRICE_ID_PRO"]
-                                          # (pas ici, pour éviter de committer des IDs dans Git)
-        # ℹ️ "PDF" = impression du rapport HTML (Ctrl+P → Enregistrer en PDF),
+        "stripe_price_id": None,     
         # pas un module de génération PDF séparé. Le CSS @media print de
         # html_export.py gère déjà la mise en page imprimable.
         "icon": "🚀",

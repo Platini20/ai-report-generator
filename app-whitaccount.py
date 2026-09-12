@@ -19,12 +19,9 @@ from utils.auth_supabase import (
     show_quota_sidebar,
     show_upgrade_message,
     handle_password_recovery,
-    update_profile,
     logout
 )
 from utils.stripe_checkout import handle_checkout_return, show_upgrade_button, show_manage_subscription_button
-from utils.anon_trial import get_device_id, get_or_create_anon_trial, increment_anon_report_count
-from utils.plans_config import PLAN_CONFIGS
 
 # Langue par défaut AVANT tout affichage (connexion, reset mot de passe inclus)
 if "ui_lang" not in st.session_state:
@@ -35,67 +32,9 @@ if "ui_lang" not in st.session_state:
 if handle_password_recovery():
     st.stop()
 
-# ==========================================
-# 🔓 ACCÈS : essai SANS compte, ou connecté
-# ==========================================
-# L'app est utilisable sans créer de compte (friction réduite). Le quota
-# d'essai est alors suivi via un identifiant navigateur (localStorage) +
-# Supabase (utils.anon_trial). La création de compte n'est demandée
-# QUE lorsque l'utilisateur clique "Passer Pro".
-if st.session_state.get("authenticated") and "_anon_carryover_used" in st.session_state:
-    # La connexion (pour upgrade ou volontaire) vient de réussir : on reporte
-    # le solde d'essai anonyme capturé AVANT la connexion (sinon écrasé par
-    # le profil du nouveau compte, qui démarre normalement à 0).
-    _carry = st.session_state.pop("_anon_carryover_used")
-    if st.session_state.get("user_id"):
-        update_profile(st.session_state["user_id"], {"reports_used": _carry})
-        st.session_state["reports_used"] = _carry
-    st.session_state.pop("pending_signup_for_upgrade", None)
-    st.session_state.pop("_show_login_from_sidebar", None)
-    st.session_state["is_anonymous"] = False
-
-elif st.session_state.get("pending_signup_for_upgrade") and not st.session_state.get("authenticated"):
-    # L'utilisateur anonyme veut passer Pro → on impose la création de compte
-    st.info(
-        "Créez un compte pour continuer vers le paiement — votre solde d'essai actuel sera conservé."
-        if st.session_state.ui_lang == "fr"
-        else "Create an account to continue to payment — your current trial balance will be kept."
-    )
-    if not check_login():
-        st.stop()
-
-elif st.session_state.get("_show_login_from_sidebar") and not st.session_state.get("authenticated"):
-    # L'utilisateur anonyme a cliqué "J'ai déjà un compte" → connexion volontaire
-    if not check_login():
-        st.stop()
-
-elif not st.session_state.get("authenticated"):
-    # Mode anonyme : pas de connexion imposée
-    _device_id = get_device_id()
-    if _device_id is None:
-        st.info(
-            "Initialisation..." if st.session_state.ui_lang == "fr" else "Setting up..."
-        )
-        st.stop()  # le composant localStorage renverra sa valeur au prochain rerun
-
-    st.session_state["is_anonymous"] = True
-    st.session_state["_device_id"] = _device_id
-
-    _trial = get_or_create_anon_trial(_device_id)
-    st.session_state["user_plan"] = "trial"
-    st.session_state["reports_used"] = _trial["reports_used"]
-    st.session_state["reports_limit"] = _trial["reports_limit"]
-
-else:
-    st.session_state["is_anonymous"] = False
-
-
-def increment_quota():
-    """Incrémente le quota de rapports, connecté ou anonyme."""
-    increment_report_count()  # gère déjà le cas connecté (session_state + table profiles)
-    if st.session_state.get("is_anonymous") and st.session_state.get("_device_id"):
-        increment_anon_report_count(st.session_state["_device_id"], st.session_state["reports_used"])
-
+# Vérifier l'authentification AVANT tout
+if not check_login():
+    st.stop()  # Bloquer si non authentifié
 
 # Traiter un éventuel retour de paiement Stripe (?checkout=success&session_id=...)
 handle_checkout_return()
@@ -494,32 +433,20 @@ with st.sidebar:
             else "🔒 Word export available with the Pro plan."
         )
     # ==========================================
-    # 🚪 DÉCONNEXION (connecté) OU CONNEXION OPTIONNELLE (anonyme)
+    # 🚪 BOUTON DÉCONNEXION
     # ==========================================
     st.markdown("---")
-
-    if st.session_state.get("is_anonymous"):
-        st.caption(
-            "🎯 Mode essai — sans compte" if st.session_state.ui_lang == "fr" else "🎯 Trial mode — no account"
-        )
-        if st.button(
-            "🔒 " + ("J'ai déjà un compte" if st.session_state.ui_lang == "fr" else "I already have an account"),
-            use_container_width=True,
-        ):
-            st.session_state["_show_login_from_sidebar"] = True
-            st.session_state["_anon_carryover_used"] = st.session_state.get("reports_used", 0)
-            st.rerun()
-    else:
-        col1, col2 = st.columns([3, 1])
-
-        with col1:
-            user_email = st.session_state.get("user_email", "")
-            if user_email:
-                st.caption(f"👤 {user_email}")
-
-        with col2:
-            if st.button("🚪", help="Déconnexion", use_container_width=True):
-                logout()
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        user_email = st.session_state.get("user_email", "")
+        if user_email:
+            st.caption(f"👤 {user_email}")
+    
+    with col2:
+        if st.button("🚪", help="Déconnexion", use_container_width=True):
+            logout()
 
 # ==========================================
 # MAIN - TRAITEMENT DES DONNÉES
@@ -1216,7 +1143,7 @@ if st.session_state.active_tab == "insights":
                     # (sauf pour le dataset d'exemple)
                     # ==========================================
                     if not is_example:
-                        increment_quota()
+                        increment_report_count()
                     
                     # Afficher quota restant
                     from utils.auth_supabase import get_quota_info

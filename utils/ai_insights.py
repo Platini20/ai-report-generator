@@ -16,8 +16,6 @@ from typing import Dict, Any, Optional, Tuple
 #ANTHROPIC_MODEL = "claude-3-haiku-20240307"  # Rapide, économique, fiable
 ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"  # Plus puissant, plus cher
 
-# Pour changer : décommentez la ligne Sonnet et commentez Haiku
-
 # ==========================================
 # MODE 1 : ANTHROPIC API (Cloud)
 # ==========================================
